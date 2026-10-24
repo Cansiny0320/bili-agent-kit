@@ -1,5 +1,5 @@
 <h1 align="center">bili-agent-kit</h1>
-<p align="center">让任意 Agent 使用同一套 B 站工具。</p>
+<p align="center">给 AI 助手和应用接入 B 站工具。</p>
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/TypeScript-SDK%20%7C%20CLI%20%7C%20MCP-3178c6" alt="TypeScript SDK, CLI and MCP">
@@ -9,12 +9,12 @@
   <a href="README.md">简体中文</a> · <a href="README.en.md">English</a> · <a href="https://github.com/Cansiny0320/bili-agent-kit/issues">问题反馈</a>
 </p>
 
-bili-agent-kit 是独立的 B 站工具库，提供 TypeScript SDK、JSON CLI 和 MCP。三种入口共用读取、审批、限流与发送逻辑，可以接入支持 MCP 的 Agent，也可以直接嵌入自己的程序。
+bili-agent-kit 提供 TypeScript SDK、命令行工具和 MCP 服务，用来读取 B 站视频、字幕、评论和消息，也支持扫码登录和审核后发送回复。可以接入支持 MCP 的 AI 助手，或在自己的程序中调用。
 
 ## 能做什么
 
 - **读取内容**：视频信息、搜索结果、官方字幕、评论、可信对象的私信，以及直播房间和近期弹幕。
-- **持续接收私信**：单次轮询、持久游标和收据确认，进程重启后仍可继续处理；轮询时间由宿主安排。
+- **接收私信**：保存读取进度，重启后可以继续处理。需要定时检查时，由接入它的程序安排调用。
 - **审核后发送**：评论发布与删除、私信、直播弹幕。写入默认关闭，须配置目标白名单并由管理员批准草稿。
 - **提取画面**：可选 ffmpeg 从指定本地视频采样，最多 12 帧；不自动下载视频或安装 ffmpeg。
 
@@ -54,7 +54,7 @@ CLI 只向 stdout 输出 JSON。每个结果都有 `version: 1` 和 `ok`；失�
 
 ### 扫码登录
 
-示例配置已指定 `credentialsFile`。在管理员终端运行：
+示例配置已指定 `credentialsFile`。在你自己控制的终端中运行：
 
 ```sh
 npx --yes @bili-agent-kit/cli@0.1.0 --config config.local.json auth.login '{}'
@@ -73,7 +73,7 @@ npx --yes @bili-agent-kit/cli@0.1.0 --config config.local.json auth.logout '{}'
 
 ### 接入 MCP
 
-在宿主的 MCP 配置中使用 npm 包，将配置文件路径替换成实际绝对路径。需要登录时，先用上面的 CLI 命令对同一份配置扫码登录：
+在 AI 助手的 MCP 配置中使用 npm 包，将配置文件路径替换成实际绝对路径。需要登录时，先用上面的 CLI 命令对同一份配置扫码登录：
 
 ```json
 {
@@ -106,15 +106,15 @@ const video = await kit.reads.video({ bvid: "BV1xx411c7mD" });
 console.log(video.title);
 ```
 
-如需复用 CLI/MCP 的配置和登录状态，从同一包导入 `loadKit`，使用 `const kit = await loadKit("./config.local.json")`。凭据、状态存储、网络请求和时钟均可注入；只读临时会话可用 `MemoryStore`，外部写入要求持久存储。详细配置和全部操作见 [使用说明](docs/usage.md)。
+如需复用 CLI/MCP 的配置和登录状态，从同一包导入 `loadKit`，使用 `const kit = await loadKit("./config.local.json")`。临时读取可以使用 `MemoryStore`；发送操作需要保存草稿和执行记录，请使用 `FileStore` 等持久存储。完整 API 和配置见 [使用说明](docs/usage.md)。
 
 ## 审批与数据
 
-写入流程为 **预览 → 持久草稿 → 管理员核对内容和摘要 → 执行**。相同幂等键不能换内容；发送结果不明时停止，必须由管理员回读核查。私信发送还要求可信目标和互相关注。
+发送前先生成并保存草稿，由管理员检查内容和摘要后批准执行。同一次发送不能通过更换内容重复执行；发送结果不明时会停止，需要先核查结果。私信还要求目标在可信名单中，且双方互相关注。
 
-Cookie 只从显式配置或 SDK provider 取得，不扫描浏览器或用户主目录。状态保存在指定目录，含草稿和待处理私信，不含 Cookie；字幕 CDN 不接收账号 Cookie。
+Cookie 由你指定的配置或 SDK 凭据提供器读取，不会自动扫描浏览器。草稿和待处理私信保存在配置的状态目录中，Cookie 单独保存；获取字幕时不会把 Cookie 发给字幕 CDN。
 
-**CLI 管理命令不是 shell 沙箱。** 宿主必须把管理员命令、凭据和状态文件与模型的 shell/文件权限隔离。完整边界、限流和恢复方式见 [安全说明](SECURITY.md)。
+**MCP 中的审批限制不能阻止 AI 通过终端执行管理员命令。** 接入时，请单独限制 AI 对管理员命令、凭据和状态文件的访问。权限、限流和异常恢复见 [安全说明](SECURITY.md)。
 
 ## 开发与验证
 
@@ -132,7 +132,7 @@ pnpm smoke
 
 构建后可用 `node packages/cli/dist/main.mjs help` 调用本地 CLI；读取或登录时仍需显式传入配置文件。
 
-`pnpm fmt` 会修改格式。测试使用模拟网络；`smoke` 打包三个包、独立安装并验证 SDK、CLI 和 MCP stdio。没有用真实账号发送消息。B 站接口可能变化，模拟测试不保证真实账号可用。直播读取为近期历史快照；当前没有常驻 WebSocket 监听或自动调度器。
+`pnpm fmt` 会修改格式。测试使用模拟网络；`smoke` 会打包并安装三个包，检查 SDK、CLI 和 MCP 是否能正常使用。尚未验证真实账号发送消息。直播工具读取近期弹幕记录，不会持续监听；定时调用需要由接入的程序安排。
 
 ## 许可
 
@@ -143,3 +143,8 @@ pnpm smoke
 如果这个项目对你有帮助，欢迎通过微信或支付宝支持后续开发。感谢你的支持！
 
 ![微信与支付宝赞助二维码](.github/sponsorship/sponsorship-cats.png)
+
+## 相关项目
+
+- [codex-bili-dragon](https://github.com/Cansiny0320/codex-bili-dragon)：在官方 Codex 客户端中运行的 B 站小白龙，按兴趣探索视频、写日记和处理消息。
+- [dsh-bili-whale-dashboard](https://github.com/Cansiny0320/dsh-bili-whale-dashboard)：给 DSH 原版养鱼插件配套的管理后台，用来查看日记、审核回复和调整人设。

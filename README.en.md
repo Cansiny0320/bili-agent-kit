@@ -1,5 +1,5 @@
 <h1 align="center">bili-agent-kit</h1>
-<p align="center">One set of Bilibili tools for any agent.</p>
+<p align="center">Bilibili tools for AI assistants and applications.</p>
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/TypeScript-SDK%20%7C%20CLI%20%7C%20MCP-3178c6" alt="TypeScript SDK, CLI and MCP">
@@ -9,12 +9,12 @@
   <a href="README.md">简体中文</a> · <a href="README.en.md">English</a> · <a href="https://github.com/Cansiny0320/bili-agent-kit/issues">Feedback</a>
 </p>
 
-bili-agent-kit is an independent Bilibili toolkit with a TypeScript SDK, JSON CLI and MCP server. All three share the same reads, approvals, rate limits and write execution. Connect it to an MCP host or embed it in your own application.
+bili-agent-kit provides a TypeScript SDK, command-line tools and an MCP server for reading Bilibili videos, subtitles, comments and messages. It also supports QR login and sending replies after approval. Connect it to an AI assistant that supports MCP, or call it from your own application.
 
 ## What can it do?
 
 - **Read content**: video metadata, search results, official subtitles, comments, trusted-target DMs, live room details and recent live chat.
-- **Receive DMs reliably**: one-shot polling with persistent cursors and acknowledgement receipts survives process restarts. Your host controls scheduling.
+- **Receive DMs**: save reading progress and continue after a restart. Your application decides when to check for new messages.
 - **Send after review**: add/delete comments, send DMs and live chat. Writes are disabled by default and require an allowlisted target and administrator-approved draft.
 - **Sample frames**: optionally use your own ffmpeg to sample up to 12 frames from a configured local video. No automatic video downloads or ffmpeg installation.
 
@@ -54,7 +54,7 @@ The CLI writes JSON only to stdout. Every response includes `version: 1` and `ok
 
 ### QR login
 
-The example config includes `credentialsFile`. Run from a trusted administrator terminal:
+The example config includes `credentialsFile`. Run these commands in a terminal you control:
 
 ```sh
 npx --yes @bili-agent-kit/cli@0.1.0 --config config.local.json auth.login '{}'
@@ -73,7 +73,7 @@ npx --yes @bili-agent-kit/cli@0.1.0 --config config.local.json auth.logout '{}'
 
 ### Connect over MCP
 
-Configure your host to run the npm package, replacing the config path with an actual absolute path. For authenticated access, first use the CLI commands above to log in with the same config:
+Configure your AI assistant to run the npm package, replacing the config path with an actual absolute path. For authenticated access, first use the CLI commands above to log in with the same config:
 
 ```json
 {
@@ -106,15 +106,15 @@ const video = await kit.reads.video({ bvid: "BV1xx411c7mD" });
 console.log(video.title);
 ```
 
-To reuse CLI/MCP configuration and login state, import `loadKit` from the same package and use `const kit = await loadKit("./config.local.json")`. Credentials, storage, fetch and clock are injectable. `MemoryStore` supports temporary read sessions; external writes require durable storage. See the [usage reference](docs/usage.md) for configuration and operations.
+To reuse CLI/MCP configuration and login state, import `loadKit` from the same package and use `const kit = await loadKit("./config.local.json")`. Use `MemoryStore` for temporary reads. Sending requires saved drafts and execution records, so use `FileStore` or another persistent store. See the [usage reference](docs/usage.md) for the full API and configuration.
 
 ## Approvals and data
 
-Writes follow **preview → persistent draft → administrator reviews content and digest → execute**. An idempotency key cannot be reused with different content. Uncertain sends stop until an administrator reconciles the outcome. DMs additionally require a trusted target and a verified mutual follow.
+Sending starts with a saved draft. An administrator checks its content and digest before approving execution. A send request cannot be reused with different content. If the result is unclear, execution stops until someone checks what happened. DMs also require a trusted recipient and mutual following.
 
-Cookies come only from explicit configuration or an SDK provider. The toolkit does not inspect browsers or home directories. The state directory contains drafts and pending DMs, never account Cookies. Subtitle CDN requests do not carry account Cookies.
+Cookies come from your configuration or SDK credential provider; the toolkit does not search your browser for them. Drafts and pending DMs are stored separately from cookies. Requests to subtitle CDNs do not include account cookies.
 
-**CLI administration is not a shell sandbox.** The host must separate administrator commands, credentials and state files from model-controlled shell/file access. See [security and recovery](SECURITY.md).
+**MCP approval rules cannot stop an AI from running administrator commands through a terminal.** Restrict its access to those commands, credentials and state files separately. See [security and recovery](SECURITY.md) for permissions, rate limits and recovery steps.
 
 ## Development and verification
 
@@ -132,7 +132,7 @@ pnpm smoke
 
 After building, run `node packages/cli/dist/main.mjs help` to use the local CLI. Read and login operations still require an explicit config file.
 
-`pnpm fmt` changes formatting. Tests use simulated network responses; `smoke` packs and independently installs all three packages, then checks SDK/CLI exports and MCP stdio. No real-account messages were sent. Bilibili interfaces may change; simulated tests do not establish live-account compatibility. Live chat reads are recent snapshots; persistent WebSocket listening and scheduling are not included.
+`pnpm fmt` changes formatting. Tests use simulated network responses; `smoke` packages and installs all three packages, then checks the SDK, CLI and MCP server. Sending from a real account has not been verified. Live chat tools read recent messages rather than listening continuously; your application must schedule repeated calls.
 
 ## License
 
@@ -143,3 +143,8 @@ After building, run `node packages/cli/dist/main.mjs help` to use the local CLI.
 If this project is useful to you, you can support its continued development via WeChat Pay or Alipay. Thank you!
 
 ![Support via WeChat Pay or Alipay](.github/sponsorship/sponsorship-cats.png)
+
+## Related projects
+
+- [codex-bili-dragon](https://github.com/Cansiny0320/codex-bili-dragon): a Bilibili companion for the official Codex client, with video exploration, diaries and message handling.
+- [dsh-bili-whale-dashboard](https://github.com/Cansiny0320/dsh-bili-whale-dashboard): a dashboard for the original DSH Bili Whale plugin, with diaries, reply reviews and personality settings.
