@@ -52,13 +52,24 @@ it("fails invalid credentials without replacing the original file and uses priva
   await credentials.update(async () => fakeCredentials);
   if (process.platform !== "win32") expect((await stat(credentials.path)).mode & 0o777).toBe(0o600);
   else {
-    const script = `$ErrorActionPreference='Stop'; $acl=[System.IO.File]::GetAccessControl('${credentials.path.replaceAll("'", "''")}'); $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; @{Protected=$acl.AreAccessRulesProtected; OnlyCurrentUser=(@($acl.Access | Where-Object {$_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value -ne $sid}).Count -eq 0); RuleCount=@($acl.Access).Count} | ConvertTo-Json -Compress`;
+    const system = join(process.env.SystemRoot ?? "C:\\Windows", "System32");
+    const options = { windowsHide: true, timeout: 10000 };
     const { stdout } = await promisify(execFile)(
-      "powershell.exe",
-      ["-NoProfile", "-NonInteractive", "-Command", script],
-      { windowsHide: true },
+      join(system, "whoami.exe"),
+      ["/user", "/fo", "csv", "/nh"],
+      options,
     );
-    expect(JSON.parse(stdout)).toEqual({ Protected: true, OnlyCurrentUser: true, RuleCount: 1 });
+    const sid = stdout.match(/S-1-\d+(?:-\d+)+/)?.[0];
+    expect(sid).toBeDefined();
+    const aclPath = `${credentials.path}.acl`;
+    await promisify(execFile)(
+      join(system, "icacls.exe"),
+      [credentials.path, "/save", aclPath, "/q"],
+      options,
+    );
+    const sddl = (await readFile(aclPath, "utf16le")).split(/\r?\n/)[1];
+    expect(sddl).toMatch(/^D:P(?:AI)?\(/);
+    expect(sddl?.match(/\([^)]*\)/g)).toEqual([`(A;;FA;;;${sid})`]);
   }
   await writeFile(credentials.path, "{broken");
   await expect(credentials.update(async () => fakeCredentials)).rejects.toMatchObject({
