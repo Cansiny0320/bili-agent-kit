@@ -147,3 +147,23 @@ This is a fragment to merge into the config, not a complete config file. `file` 
 `packages/core` owns all behavior and schemas; `packages/cli` and `packages/mcp` adapt them. Build output is ESM (`.mjs`) with TypeScript declarations (`.d.mts`). Vite+ uses its own version number for the bundled Vite API; the targeted pnpm peer rules acknowledge that alias. TypeScript 7.0.2 is stable, while Vite+'s declaration emitter currently warns that its TypeScript 7 integration is experimental; declaration files and package exports are checked by `pnpm smoke`.
 
 Use the workspace or direct built imports until npm publication is explicitly performed. `pnpm --filter @bili-agent-kit/core pack --pack-destination ./artifacts` creates a package archive. To install CLI/MCP tarballs before registry publication, also supply the core tarball and a package-manager override resolving `@bili-agent-kit/core` to that local archive; otherwise their `0.1.0` dependency would query npm. `scripts/smoke.mjs` demonstrates the complete isolated installation. No command in this repository publishes to npm.
+
+## First npm publication preparation
+
+The initial candidate version is `0.1.0` for all three packages. Publication is a separate explicitly authorized operation. The workspace root is private; only `packages/core`, `packages/cli`, and `packages/mcp` are publishable. Each package pins public access and the npm registry in `publishConfig` and includes its own README, built ESM/declarations, LICENSE and NOTICE.
+
+Prerequisites: log in to npm with an account allowed to publish under `@bili-agent-kit`, and verify that the version has not already been published. A registry 404 alone does not establish scope ownership. If using an organization scope, membership must include publish permission. Do not place npm tokens or Bilibili credentials in package files.
+
+Create candidates after the normal build/check/test/smoke checks using `pnpm pack --pack-destination <absolute-output-directory>` from each package directory. Use pnpm to resolve `workspace:*` into the actual `0.1.0` dependency in the tarball. Publish the verified tarballs rather than passing the source directories to npm.
+
+From the candidate directory, these commands are previews only:
+
+```sh
+npm publish bili-agent-kit-core-0.1.0.tgz --dry-run --ignore-scripts --access public --registry=https://registry.npmjs.org
+npm publish bili-agent-kit-cli-0.1.0.tgz --dry-run --ignore-scripts --access public --registry=https://registry.npmjs.org
+npm publish bili-agent-kit-mcp-0.1.0.tgz --dry-run --ignore-scripts --access public --registry=https://registry.npmjs.org
+```
+
+Dry runs do not publish or prove registry permissions. After explicit publication authorization and npm authentication, publish the same reviewed artifacts without `--dry-run`, **core first**, then CLI and MCP. Stop on failure and query the registry before retrying: published name/version pairs cannot simply be overwritten. Finish by verifying registry versions, SDK installation and the npx CLI/MCP entrypoints. These steps are intentionally not automated by a publish lifecycle script or Git push.
+
+References: [npm publish](https://docs.npmjs.com/cli/v11/commands/npm-publish/) and [public scoped packages](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages/).

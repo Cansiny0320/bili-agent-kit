@@ -2,6 +2,10 @@
   "name": "@bili-agent-kit/core",
   "version": "0.1.0",
   "description": "Harness-independent Bilibili SDK with persistent safety controls",
+  "homepage": "https://github.com/Cansiny0320/bili-agent-kit#readme",
+  "bugs": {
+    "url": "https://github.com/Cansiny0320/bili-agent-kit/issues"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -19,6 +23,10 @@
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs"
     }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "build": "vp pack"

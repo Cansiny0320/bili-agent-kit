@@ -2,6 +2,10 @@
   "name": "@bili-agent-kit/mcp",
   "version": "0.1.0",
   "description": "stdio MCP server for bili-agent-kit",
+  "homepage": "https://github.com/Cansiny0320/bili-agent-kit#readme",
+  "bugs": {
+    "url": "https://github.com/Cansiny0320/bili-agent-kit/issues"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -22,6 +26,10 @@
       "types": "./dist/index.d.mts",
       "import": "./dist/index.mjs"
     }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "scripts": {
     "build": "vp pack"
