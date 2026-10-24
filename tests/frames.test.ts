@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vite-plus/test";
 import { EventEmitter } from "node:events";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sampleFrames } from "../packages/core/src/frames.js";
@@ -46,7 +46,7 @@ it("uses argument arrays, restricted protocols, hidden windows and a bounded pro
   expect(result.files).toHaveLength(1);
   expect(spawn).toHaveBeenCalledWith(
     "fixture-ffmpeg",
-    expect.arrayContaining(["file,pipe", file, "-frames:v", "1"]),
+    expect.arrayContaining(["file,pipe", await realpath(file), "-frames:v", "1"]),
     expect.objectContaining({ shell: false, windowsHide: true, timeout: 120000 }),
   );
 });

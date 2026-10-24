@@ -62,7 +62,10 @@ export class FileStore implements StateStore {
       try {
         lock = await open(lockPath, "wx", 0o600);
       } catch (error) {
-        if (!isCode(error, "EEXIST")) throw new KitError("STATE_INVALID", "Cannot lock state.");
+        // Windows can report EPERM while another exclusive lock is delete-pending.
+        // Retrying creation is safe: never unlink or take over an existing lock.
+        if (!isCode(error, "EEXIST") && !isCode(error, "EPERM"))
+          throw new KitError("STATE_INVALID", "Cannot lock state.");
         if (Date.now() >= deadline)
           throw new KitError(
             "STATE_BUSY",
