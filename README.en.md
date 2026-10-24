@@ -20,7 +20,7 @@ bili-agent-kit is an independent Bilibili toolkit with a TypeScript SDK, JSON CL
 
 ## Quick start
 
-Requires Node.js **22.18+, 24.11+ or 26+**. Node 23/25 are unsupported. All three packages are published on npm at **0.1.0**; no repository clone or pnpm installation is needed to use them.
+Requires Node.js **22.18+, 24.11+ or 26+**. Node.js 23/25 are unsupported.
 
 | Package                                                                    | Purpose                                              |
 | -------------------------------------------------------------------------- | ---------------------------------------------------- |
