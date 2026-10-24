@@ -27,7 +27,8 @@
     "build": "vp pack"
   },
   "dependencies": {
-    "@bili-agent-kit/core": "workspace:*"
+    "@bili-agent-kit/core": "workspace:*",
+    "qrcode": "1.5.4"
   },
   "engines": {
     "node": "^22.18.0 || ^24.11.0 || >=26.0.0"

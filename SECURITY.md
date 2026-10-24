@@ -16,7 +16,17 @@ Corrupt/incompatible state is never automatically reset. Lock contention fails c
 
 Requests are spaced at least 1,500 ms and share a persistent dispatch lease. Budgets are per account: 600 reads/hour, 3,000 reads/day, 12 writes/hour, 30 writes/day. Write cooldown is 120 seconds, or 60 seconds for DMs. These are conservative local limits, not a promise of platform acceptance. Window counters reset after their elapsed duration; counters include reservations and failed attempts. Repeated runs and signed-key requests consume the same budget.
 
-HTTP 412/429 and platform risk codes trigger persistent exponential backoff from 5 to 30 minutes, respecting a longer Retry-After. Login/captcha codes require administrator review. There is no automatic network retry. All requests have a 30-second timeout, JSON response size limits and redirects disabled. API origins are fixed. Subtitle downloads accept HTTPS Bilibili/hdslb hosts and carry no account Cookie. Errors omit raw upstream bodies and known credentials; no request logger is enabled.
+HTTP 412/429 and platform risk codes trigger persistent exponential backoff from 5 to 30 minutes, respecting a longer Retry-After. Login/captcha codes require administrator review. There is no automatic network retry. Tool requests have a 30-second timeout, JSON response size limits and redirects disabled. API origins are fixed. Subtitle downloads accept HTTPS Bilibili/hdslb hosts and carry no account Cookie. Errors omit raw upstream bodies and known credentials; no request logger is enabled.
+
+## QR login and credential files
+
+QR login is a trusted administrator capability and is not exposed through MCP. Only the fixed Bilibili passport and API origins receive login requests; redirects are disabled. Login requests use 15-second timeouts, bounded JSON and at least 2-second spacing. They are separate from tool traffic so expired sessions can be replaced; login neither clears persisted backoff/manual pauses nor enables writes. Each challenge has a 3-minute local lifetime. Risk/captcha responses stop the login rather than retrying. No automatic Cookie renewal or refresh-token storage is implemented.
+
+CLI QR/progress is written only to stderr. The raw SDK login result intentionally contains credentials for private host storage; do not expose it as a model tool. CLI success/status includes only authentication state, UID and name. Generated PNGs contain an ephemeral login challenge and have private file permissions; keep them out of logs and source control.
+
+Credential files are plaintext. Newly saved files have POSIX 0600 permissions or a protected Windows ACL granting only the current SID. Data is written after permissions are applied, fsynced and atomically renamed. A separate exclusive lock serializes login/logout. Failed login leaves old credentials intact. An abandoned credential lock is never stolen: stop the owner before manual removal. A configured existing credential file is not automatically re-permissioned until replaced; provision imported files privately. State directory permissions remain the administrator's responsibility.
+
+Verified session fingerprints map to stable UIDs for budgets, manual pauses and cursors. Drafts remain session-bound. Only verified old identities may migrate legacy state; conflicting/unmapped data stops login replacement. The identity mapping is saved before replacing credentials, so a failed replacement still leaves the previous login usable and migration is idempotent. Backup state before upgrading; old binaries must use pre-upgrade backups. Logout removes only the local credential file, retains all state, and does not revoke remote sessions or interrupt captured in-flight requests.
 
 ## Approval and uncertain sends
 

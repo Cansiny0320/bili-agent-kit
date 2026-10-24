@@ -113,6 +113,7 @@ export const cursorSchema = z.object({
 export type Cursor = z.infer<typeof cursorSchema>;
 export const stateSchema = z.object({
   version: z.literal(1),
+  identities: z.record(z.string(), id).default({}),
   sequence: z.number().int().nonnegative(),
   drafts: z.record(z.string(), draftSchema),
   cursors: z.record(z.string(), cursorSchema),

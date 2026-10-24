@@ -7,11 +7,13 @@ import {
   type BiliKit,
   type Envelope,
 } from "@bili-agent-kit/core";
+import { runAuthCli, type AuthCliOptions } from "./auth.js";
 
 export async function runCli(
   argv: string[],
   stdin: () => Promise<string>,
   load: (path: string) => Promise<BiliKit> = loadKit,
+  authOptions: AuthCliOptions = {},
 ): Promise<Envelope<unknown>> {
   if (argv.length === 1 && ["help", "--help", "list"].includes(argv[0] ?? ""))
     return {
@@ -19,7 +21,12 @@ export async function runCli(
       ok: true,
       data: {
         usage:
-          "bili-agent --config config.local.json <operation|admin.approve|admin.reconcile|admin.resume> <JSON|->",
+          "bili-agent --config config.local.json <operation|auth.login|auth.status|auth.logout|admin.approve|admin.reconcile|admin.resume> <JSON|->",
+        auth: {
+          "auth.login": { png: "optional new PNG path" },
+          "auth.status": {},
+          "auth.logout": {},
+        },
         operations: describeOperations(),
       },
     };
@@ -38,6 +45,7 @@ export async function runCli(
     } catch {
       throw new KitError("INVALID_INPUT", "Input must be valid JSON.");
     }
+    if (name?.startsWith("auth.")) return runAuthCli(argv[1], name, input, authOptions);
     const kit = await load(argv[1]);
     if (name?.startsWith("admin.")) {
       if (!input || typeof input !== "object" || Array.isArray(input))

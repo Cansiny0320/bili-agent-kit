@@ -13,6 +13,7 @@ export interface StateStore {
 function emptyState(): State {
   return {
     version: 1,
+    identities: {},
     sequence: 0,
     drafts: {},
     cursors: {},

@@ -17,19 +17,53 @@ Both entrypoints require `--config <file>`; no default home directory is read or
 }
 ```
 
-Omit `credentialsFile` for anonymous public reads. Authenticated subtitle/DM reads require a separately supplied JSON file with `sessdata`, `bili_jct`, and optional `buvid3`. These are the account's Cookie components, not a complete Cookie header. Provision the file yourself in a private directory; never put values in CLI arguments, MCP tool calls, source control or logs. Unknown JSON properties are rejected. The SDK can inject a credential provider instead of using a file.
+Omit `credentialsFile` for anonymous public reads. A configured but nonexistent file also allows anonymous reads. Authenticated subtitle/DM reads require a separately supplied JSON file with `sessdata`, `bili_jct`, and optional `buvid3`. These are the account's Cookie components, not a complete Cookie header. Create it through QR login or provision it in a private directory; never put values in CLI arguments, MCP tool calls, source control or logs. Unknown JSON properties are rejected. The SDK can inject a credential provider instead of using a file.
 
 To enable writes, the administrator sets `writesEnabled: true` and exact targets: `comment:<aid>`, `dm:<uid>`, or `live:<canonical room ID>`. DM access also requires the UID in `trustedDmTargets`. Comments currently support video replies (`type: 1`). Use the numeric `aid`/`cid` and canonical `room_id` returned by the read tools. Config is loaded at process startup: restart a long-running MCP process after policy changes. Stop the old process before revoking permissions; editing a file alone does not revoke an in-flight request.
 
+## QR authentication (trusted host only)
+
+```sh
+node packages/cli/dist/main.mjs --config config.local.json auth.login '{}'
+node packages/cli/dist/main.mjs --config config.local.json auth.login '{"png":"login-qr.png"}'
+node packages/cli/dist/main.mjs --config config.local.json auth.status '{}'
+node packages/cli/dist/main.mjs --config config.local.json auth.logout '{}'
+```
+
+The first two lines are alternative login commands. `credentialsFile` must be explicitly configured. QR/progress goes to stderr; stdout contains one JSON envelope with `authenticated` and, on success, `account: {uid, name}`. Status performs live verification; network failures are errors, not a claim that the account is logged out. PNG paths are relative to the current working directory; parent directories must exist and files are never overwritten. The terminal QR is always displayed. No browser or local web server is opened.
+
+Scan and confirm in the Bilibili app. Polling is spaced at least 2 seconds, each request times out after 15 seconds, and the local QR window is 3 minutes (the platform can expire it earlier). Ctrl+C returns `CANCELLED` / exit code 130. Missing cookies, failed verification, timeout, cancellation and storage failures before replacement preserve the previous credential file. Credentials are plaintext: POSIX 0600; Windows disables inherited permissions on the new file and grants only the current user's SID. State directories still require administrator-managed permissions. No refresh token is retained and no automatic session renewal is performed.
+
+Logout only deletes local credentials; it does not revoke the Bilibili session, remove budgets/cursors/drafts, or sign out other devices. Credentials are read again on each operation; in-flight requests can still finish with their captured session. A `.lock` next to the credential file serializes login/logout; after a crash, verify the process has stopped before removing only that lock.
+
+For SDK applications with custom UI/storage:
+
+```ts
+import { QrLogin } from "@bili-agent-kit/core";
+
+const login = new QrLogin();
+const qr = await login.generate();
+// Render qr.url in your trusted UI. Keep qr.key out of logs.
+const result = await login.poll(qr); // call again while waiting/scanned
+if (result.status === "success") {
+  // Save result.credentials in your private store; result.account is verified.
+  // Never return this raw result to an agent or log it.
+}
+```
+
+`generate`, `poll`, and `verify` accept an optional AbortSignal; `QrLogin` also accepts injected fetch/clock. To reuse local persistence and the complete polling loop, use `const auth = await loadAuth(configPath); await auth.login({onQr: async qr => { /* render qr.url */ }});`. Its result is sanitized, as are `auth.status()` and `auth.logout()`; low-level `QrLogin.poll()` deliberately returns credentials to the trusted host on success. `FileCredentials` is available for explicit local storage. These APIs are not MCP tools.
+
+The endpoints and status codes were checked against Bilibili's [first-party login script](https://s1.hdslb.com/bfs/static/2233-monorepo/passport/static/js/async/630.15570f6b.js). This is a website session flow, not OAuth. A user-authorized real QR login and a separate verification of the saved session succeeded on 2026-10-25; automated tests use fixture responses. This does not verify other real-account read/write operations.
+
+## Identity and state migration
+
+On first use of an unseen session, the SDK verifies `/x/web-interface/nav` and persists its session fingerprint → UID mapping. Budgets, manual pauses and DM cursors then use the UID, so re-login to the same account preserves them. Drafts retain their session fingerprint: a new login requires a new draft and approval. Switching accounts keeps their state separate.
+
+Legacy state is migrated only after verifying the exact old session. Known identity mappings survive credential expiry. If the old session has never been mapped and has expired, login cannot attribute its legacy counters/cursors: it stops without replacing credentials. Preserve the files for administrator review; do not delete state to bypass this. Conflicting legacy/current cursors also stop migration. Budget merges conservatively add counters and keep the later window start. Historical drafts are retained and never automatically replayed. Login does not clear an existing manual pause; use `admin.resume` only after reviewing the cause.
+
+Back up state and credentials privately before upgrading. Older versions do not understand the new identity mapping; to roll back, use the old executable with the pre-upgrade backup, not the migrated state.
+
 ## Operations
-
-### Login integration status (2026-10-25)
-
-This release accepts credentials from a trusted provider or an explicitly configured file; it does not implement QR login or OAuth. A host can provide a separate connection experience without exposing Cookies to the model.
-
-[JiJiDown's official update history](https://client.jijidown.com/updates.html) documents QR login behavior and, in v2.0.39 (2026-05-31), encrypted Cookie storage in `bilibili.json`. This supports a client-session route, but does not establish OAuth use. Bilibili's [official account-authorization entry](https://open.bilibili.com/doc/4/eaf0e2b5-bde9-b9a0-9be1-019bb455701c) is listed in its [first-party documentation bundle](https://s1.hdslb.com/bfs/static/studio/arcopen-fe/js/Doc.f8fe9621.js). OAuth admission, scopes for comment/DM/live sending, and suitability for long-running cloud tasks remain unverified. Its linked [older server demo](https://github.com/bilibili-openplatform/demo) is archived and explicitly not recommended, so it is not used as an implementation basis.
-
-A future QR connection flow should remain administrator-only, store the resulting session through a separate credential provider and retain all existing write approvals. Login success must never be presented as permission to perform every interaction. Such an extension needs a separately reviewed session-storage and refresh design; no QR session, account login or OAuth application was created during this work.
 
 CLI names below correspond to MCP names prefixed with `bili_`. `help`/`list` returns the full JSON schemas. JSON input uses strings for identifiers; page/count values are numbers.
 
@@ -88,9 +122,9 @@ Administrator SDK methods are `kit.admin.approve(id, digest, by)`, `reconcile(id
 {"version":1,"ok":false,"error":{"code":"APPROVAL_REQUIRED","message":"A current administrator approval is required."}}
 ```
 
-CLI exit codes: `0` success, `2` invalid input, `1` other failures. An empty DM poll is a successful result with `event: null`. MCP tool results include both text and structured content; invalid MCP arguments can also be rejected by the protocol layer before the shared envelope. MCP stdout is reserved for JSON-RPC. Direct SDK methods return typed values and throw `KitError`; `invoke`/`envelope` return the versioned contract.
+CLI exit codes: `0` success, `2` invalid input, `130` cancelled login, `1` other failures. An empty DM poll is a successful result with `event: null`. MCP tool results include both text and structured content; invalid MCP arguments can also be rejected by the protocol layer before the shared envelope. MCP stdout is reserved for JSON-RPC. Direct SDK methods return typed values and throw `KitError`; `invoke`/`envelope` return the versioned contract.
 
-Error codes include `INVALID_INPUT`, `NOT_FOUND`, `AUTH_REQUIRED`, `FORBIDDEN`, `APPROVAL_REQUIRED`, `CONFLICT`, `UNKNOWN_OUTCOME`, `RATE_LIMITED`, `TRAFFIC_PAUSED`, `NETWORK`, `UPSTREAM`, `STATE_INVALID`, `STATE_BUSY`, and `UNAVAILABLE`. Unknown errors are sanitized. Raw HTTP bodies, Cookie headers and credential-provider errors are not exposed.
+Error codes include `CANCELLED`, `INVALID_INPUT`, `NOT_FOUND`, `AUTH_REQUIRED`, `FORBIDDEN`, `APPROVAL_REQUIRED`, `CONFLICT`, `UNKNOWN_OUTCOME`, `RATE_LIMITED`, `TRAFFIC_PAUSED`, `NETWORK`, `UPSTREAM`, `STATE_INVALID`, `STATE_BUSY`, and `UNAVAILABLE`. Unknown errors are sanitized. Raw HTTP bodies, Cookie headers and credential-provider errors are not exposed.
 
 ## Optional local frames
 

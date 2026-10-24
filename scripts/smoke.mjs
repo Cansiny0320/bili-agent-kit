@@ -48,13 +48,16 @@ await writeFile(
   join(work, "verify.mjs"),
   `
 import assert from 'node:assert/strict';
-import {BiliKit,MemoryStore,invoke} from '@bili-agent-kit/core';
+import {BiliKit,MemoryStore,invoke,QrLogin,FileCredentials,loadAuth} from '@bili-agent-kit/core';
 import {runCli} from '@bili-agent-kit/cli';
 import {createMcpServer} from '@bili-agent-kit/mcp';
 const kit = new BiliKit({store:new MemoryStore()});
 const r = await invoke(kit,'write_preview',{action:{kind:'dm.send',uid:'222',text:'hello'}});
 assert.equal(r.ok,true);
 assert.equal((await runCli(['help'],async()=>'' )).ok,true);
+assert.equal(typeof new QrLogin().generate,'function');
+assert.equal(typeof FileCredentials,'function');
+assert.equal(typeof loadAuth,'function');
 await createMcpServer(kit).close();
 console.log('Packed SDK/CLI/MCP exports passed');
 `,
@@ -113,7 +116,24 @@ for (const pkg of ["core", "cli", "mcp"]) {
 // Exercise the built stdio entrypoint through the actual MCP client in its installed package context.
 const mcpEntry = join(work, "node_modules/@bili-agent-kit/mcp/dist/main.mjs");
 const config = join(work, "config.json");
-await writeFile(config, JSON.stringify({ version: 1, stateDir: "./state" }));
+await writeFile(
+  config,
+  JSON.stringify({ version: 1, stateDir: "./state", credentialsFile: "./credentials.json" }),
+);
+const authStatus = JSON.parse(
+  run(
+    process.execPath,
+    [
+      join(work, "node_modules/@bili-agent-kit/cli/dist/main.mjs"),
+      "--config",
+      config,
+      "auth.status",
+      "{}",
+    ],
+    work,
+  ),
+);
+assert.deepEqual(authStatus, { version: 1, ok: true, data: { authenticated: false } });
 const probe = join(work, "node_modules/@bili-agent-kit/mcp/stdio-smoke.mjs");
 await writeFile(
   probe,

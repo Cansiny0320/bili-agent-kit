@@ -1,6 +1,7 @@
 {
   "version": 1,
   "stateDir": "./.bili-agent-kit",
+  "credentialsFile": "./credentials.local.json",
   "policy": {
     "writesEnabled": false,
     "allowedTargets": [],

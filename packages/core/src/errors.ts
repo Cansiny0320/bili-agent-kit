@@ -1,4 +1,5 @@
 export type ErrorCode =
+  | "CANCELLED"
   | "INVALID_INPUT"
   | "NOT_FOUND"
   | "AUTH_REQUIRED"

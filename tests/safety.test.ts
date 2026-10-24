@@ -15,6 +15,7 @@ it("a persisted sending reservation after a crash cannot dispatch again", async 
   await store.transaction((s) => {
     s.drafts[draft.id]!.status = "sending";
   });
+  calls.length = 0;
   await expect(new BiliKit(options).writes.execute(draft.id)).rejects.toMatchObject({
     code: "UNKNOWN_OUTCOME",
   });
@@ -29,6 +30,7 @@ it("tampered content cannot reuse a prior approval", async () => {
   await store.transaction((s) => {
     s.drafts[draft.id]!.action = { ...dm, text: "changed" };
   });
+  calls.length = 0;
   await expect(kit.writes.execute(draft.id)).rejects.toMatchObject({ code: "CONFLICT" });
   expect(calls).toHaveLength(0);
 });

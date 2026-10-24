@@ -1,4 +1,5 @@
 export { BiliKit, type KitOptions } from "./kit.js";
+export { QrLogin, type QrChallenge, type QrResult, type LoginAccount } from "./auth.js";
 export { FileStore, MemoryStore, type StateStore } from "./state.js";
 export { KitError, envelope, type Envelope, type ErrorCode } from "./errors.js";
 export {
@@ -16,7 +17,9 @@ export {
   type State,
 } from "./contracts.js";
 export { invoke, operations, describeOperations, type OperationName } from "./operations.js";
-export { loadKit, configSchema } from "./runtime.js";
+export { loadKit, loadAuth, configSchema } from "./runtime.js";
+export { FileAuth, type LoginOptions } from "./auth-runtime.js";
+export { FileCredentials, writePrivateFile } from "./credentials.js";
 export { sampleFrames, type FrameOptions } from "./frames.js";
 export type {
   Video,

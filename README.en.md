@@ -41,6 +41,20 @@ node packages/cli/dist/main.mjs --config config.local.json video '{"bvid":"BV1xx
 
 The CLI writes JSON only to stdout. Every response includes `version: 1` and `ok`; errors include a typed code and a nonzero exit status. Pass `-` to read JSON from stdin.
 
+### QR login
+
+The example config includes `credentialsFile`. Run from a trusted administrator terminal:
+
+```sh
+node packages/cli/dist/main.mjs --config config.local.json auth.login '{}'
+node packages/cli/dist/main.mjs --config config.local.json auth.status '{}'
+node packages/cli/dist/main.mjs --config config.local.json auth.logout '{}'
+```
+
+Scan the QR printed to stderr with the Bilibili app and confirm on your phone. Use `'{"png":"login-qr.png"}'` to also create a PNG relative to the working directory; the path must not already exist. Login waits at most 3 minutes for scanning; Ctrl+C cancels. Failure preserves previous credentials.
+
+The file is plaintext with restricted permissions and is replaced only after account verification. Logout removes only local credentials, preserving state and other devices' sessions. Login does not enable writes or clear platform backoff/manual pauses. An existing MCP process reads the shared credential file on its next operation.
+
 ### Connect over MCP
 
 Configure your host to launch the local entrypoint, replacing the absolute paths:

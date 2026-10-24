@@ -41,8 +41,8 @@ export class Writes {
     parse(z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/), key);
     this.checkPolicy(action);
     const session = await this.#client.session(true);
-    const hash = digest(JSON.stringify({ account: session.account, action }));
-    const draftId = digest(`${session.account}:${key}`);
+    const hash = digest(JSON.stringify({ account: session.fingerprint, action }));
+    const draftId = digest(`${session.fingerprint}:${key}`);
     return this.#store.transaction((state) => {
       const old = state.drafts[draftId];
       if (old) {
@@ -59,7 +59,7 @@ export class Writes {
       const draft: Draft = {
         id: draftId,
         key,
-        account: session.account,
+        account: session.fingerprint,
         digest: hash,
         action,
         createdAt: now,
@@ -75,7 +75,7 @@ export class Writes {
     const draft = (await this.#store.snapshot()).drafts[draftId];
     if (!draft) throw new KitError("NOT_FOUND", "Draft not found.");
     const s = await this.#client.session(true);
-    if (draft.account !== s.account)
+    if (draft.account !== s.fingerprint)
       throw new KitError("FORBIDDEN", "Draft belongs to a different account.");
     return draft;
   }
@@ -89,6 +89,8 @@ export class Writes {
       )
     )
       throw new KitError("AUTH_REQUIRED", "Account login could not be verified.");
+    if (s.account !== `uid:${String(nav.mid)}`)
+      throw new KitError("AUTH_REQUIRED", "Verified account changed; sign in again.");
     const csrf = s.credentials?.bili_jct;
     if (!csrf) throw new KitError("AUTH_REQUIRED", "CSRF credential missing.");
     if (action.kind === "dm.send") {
@@ -155,7 +157,7 @@ export class Writes {
     if (draft.status === "sent") return draft;
     this.#assertApproved(draft);
     const s = await this.#client.session(true);
-    if (s.account !== draft.account)
+    if (s.fingerprint !== draft.account)
       throw new KitError("FORBIDDEN", "Account changed; prepare a new draft.");
     const fields = await this.#preflight(draft.action, s);
     await this.#store.transaction((state) => {

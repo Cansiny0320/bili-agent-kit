@@ -15,9 +15,11 @@ it("MCP negotiates and exposes public tools without administrator capabilities",
   try {
     const tools = (await client.listTools()).tools;
     expect(tools.map((t) => t.name)).toContain("bili_write_execute");
-    expect(tools.some((t) => /approve|admin|policy|credential|resume|reconcile/.test(t.name))).toBe(
-      false,
-    );
+    expect(
+      tools.some((t) =>
+        /approve|admin|policy|credential|resume|reconcile|auth|login|logout/.test(t.name),
+      ),
+    ).toBe(false);
     const result = await client.callTool({
       name: "bili_write_preview",
       arguments: { action: { kind: "dm.send", uid: "222", text: "hello" } },

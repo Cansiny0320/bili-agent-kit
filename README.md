@@ -41,6 +41,20 @@ node packages/cli/dist/main.mjs --config config.local.json video '{"bvid":"BV1xx
 
 CLI 只向 stdout 输出 JSON。每个结果都有 `version: 1` 和 `ok`；失败时返回错误码并以非零状态退出。支持用 `-` 从 stdin 读取 JSON。
 
+### 扫码登录
+
+示例配置已指定 `credentialsFile`。在管理员终端运行：
+
+```sh
+node packages/cli/dist/main.mjs --config config.local.json auth.login '{}'
+node packages/cli/dist/main.mjs --config config.local.json auth.status '{}'
+node packages/cli/dist/main.mjs --config config.local.json auth.logout '{}'
+```
+
+二维码和进度显示在 stderr，用哔哩哔哩 App 扫码并在手机确认。需要图片时，将登录参数改为 `'{"png":"login-qr.png"}'`，路径相对当前工作目录，目标文件必须不存在。二维码最多等待 3 分钟，Ctrl+C 取消；失败保留旧凭据。
+
+凭据以受限权限保存为本地明文 JSON，成功验证后才替换。退出仅删除这个本地文件，不撤销其他设备会话、不删除历史状态。登录不会开启发送权限或解除风控暂停。已有 MCP 进程会在下一次操作时读取同一文件。
+
 ### 接入 MCP
 
 在宿主的 MCP 配置中启动本地入口，替换成实际绝对路径：

@@ -1,7 +1,10 @@
 import { readFile, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { z } from "zod";
-import { credentialSchema, parse, policySchema } from "./contracts.js";
+import { parse, policySchema } from "./contracts.js";
+import { FileCredentials } from "./credentials.js";
+import { FileAuth } from "./auth-runtime.js";
+import { QrLogin } from "./auth.js";
 import { KitError } from "./errors.js";
 import { FileStore } from "./state.js";
 import { BiliKit } from "./kit.js";
@@ -36,7 +39,7 @@ export async function loadKit(configPath: string): Promise<BiliKit> {
     policy: config.policy,
     credentials: async () =>
       config.credentialsFile
-        ? parse(credentialSchema, await readJson(resolve(base, config.credentialsFile)))
+        ? new FileCredentials(resolve(base, config.credentialsFile)).read()
         : undefined,
     ...(config.frames
       ? {
@@ -48,4 +51,28 @@ export async function loadKit(configPath: string): Promise<BiliKit> {
         }
       : {}),
   });
+}
+export async function loadAuth(configPath: string, protocol = new QrLogin()): Promise<FileAuth> {
+  const absolute = resolve(configPath),
+    base = dirname(absolute);
+  const config = parse(configSchema, await readJson(absolute));
+  if (!config.credentialsFile)
+    throw new KitError(
+      "INVALID_INPUT",
+      "Set credentialsFile in the configuration before using auth commands.",
+    );
+  const credentialPath = resolve(base, config.credentialsFile);
+  const stateDir = resolve(base, config.stateDir);
+  const samePath = (a: string, b: string) =>
+    process.platform === "win32" ? a.toLowerCase() === b.toLowerCase() : a === b;
+  if (
+    [absolute, resolve(stateDir, "state.json"), resolve(stateDir, "state.json.lock")].some((p) =>
+      samePath(p, credentialPath),
+    )
+  )
+    throw new KitError(
+      "INVALID_INPUT",
+      "Credentials must use a separate file from config and state.",
+    );
+  return new FileAuth(new FileCredentials(credentialPath), new FileStore(stateDir), protocol);
 }

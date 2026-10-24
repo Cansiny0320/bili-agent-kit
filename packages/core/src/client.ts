@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { bindIdentity } from "./identity.js";
+import { cookieHeader, loginAccount } from "./auth.js";
 import {
   bvid,
   credentialSchema,
@@ -31,6 +33,7 @@ import {
 
 export interface Session {
   account: string;
+  fingerprint: string;
   credentials: Credentials | undefined;
 }
 const API = "https://api.bilibili.com";
@@ -72,7 +75,23 @@ export class BiliClient {
     }
     const credentials = raw === undefined ? undefined : parse(credentialSchema, raw);
     if (required && !credentials) throw new KitError("AUTH_REQUIRED", "Credentials are required.");
-    return { account: digest(credentials?.sessdata ?? "anonymous"), credentials };
+    const fingerprint = digest(credentials?.sessdata ?? "anonymous");
+    if (!credentials) return { account: fingerprint, fingerprint, credentials };
+    const known = (await this.traffic.store.snapshot()).identities[fingerprint];
+    if (known) return { account: `uid:${known}`, fingerprint, credentials };
+    const rawNav = await this.traffic.request(
+      new URL("/x/web-interface/nav", API),
+      { headers: this.headers({ account: fingerprint, fingerprint, credentials }, API) },
+      fingerprint,
+      true,
+    );
+    const account = await bindIdentity(
+      this.traffic.store,
+      fingerprint,
+      loginAccount(rawNav).uid,
+      this.traffic.clock.now(),
+    );
+    return { account, fingerprint, credentials };
   }
   async get(
     path: string,
@@ -111,7 +130,7 @@ export class BiliClient {
       referer: origin === LIVE ? "https://live.bilibili.com/" : "https://www.bilibili.com/",
       ...(c
         ? {
-            cookie: `SESSDATA=${c.sessdata}; bili_jct=${c.bili_jct}${c.buvid3 ? `; buvid3=${c.buvid3}` : ""}`,
+            cookie: cookieHeader(c),
           }
         : {}),
     };

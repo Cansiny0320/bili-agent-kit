@@ -19,7 +19,7 @@ export function checkPaused(state: State, account: string, now: number): void {
   if (state.traffic.until > now)
     throw new KitError("TRAFFIC_PAUSED", "Platform backoff is active; wait before retrying.");
 }
-async function boundedJson(response: Response): Promise<unknown> {
+export async function boundedJson(response: Response): Promise<unknown> {
   if (!response.body) throw new KitError("UPSTREAM", "Empty upstream response.");
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
