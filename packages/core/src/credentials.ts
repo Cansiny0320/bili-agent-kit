@@ -22,6 +22,12 @@ async function restrictFile(path: string): Promise<void> {
   });
   const sid = stdout.match(/S-1-\d+(?:-\d+)+/)?.[0];
   if (!sid) throw new KitError("UNAVAILABLE", "Cannot determine current Windows identity.");
+  // New files can carry explicit token-default ACEs (e.g. elevated CI accounts).
+  // Reset this still-empty, exclusively-created file before removing inheritance.
+  await exec(join(system, "icacls.exe"), [path, "/reset"], {
+    windowsHide: true,
+    timeout: 10000,
+  });
   await exec(join(system, "icacls.exe"), [path, "/inheritance:r", "/grant:r", `*${sid}:(F)`], {
     windowsHide: true,
     timeout: 10000,

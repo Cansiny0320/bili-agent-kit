@@ -69,7 +69,12 @@ it("fails invalid credentials without replacing the original file and uses priva
     );
     const sddl = (await readFile(aclPath, "utf16le")).split(/\r?\n/)[1];
     expect(sddl).toMatch(/^D:P(?:AI)?\(/);
-    expect(sddl?.match(/\([^)]*\)/g)).toEqual([`(A;;FA;;;${sid})`]);
+    const entries = sddl?.match(/\([^)]*\)/g);
+    expect(entries).toHaveLength(1);
+    // SDDL can abbreviate the local built-in Administrator SID (RID 500) as LA.
+    expect([`(A;;FA;;;${sid})`, ...(sid?.endsWith("-500") ? ["(A;;FA;;;LA)"] : [])]).toContain(
+      entries?.[0],
+    );
   }
   await writeFile(credentials.path, "{broken");
   await expect(credentials.update(async () => fakeCredentials)).rejects.toMatchObject({
