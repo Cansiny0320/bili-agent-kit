@@ -1,4 +1,3 @@
-// Persistent request budgets/backoff adapted from upstream tools/lib/traffic.mjs.
 import { randomUUID } from "node:crypto";
 import type { Clock, State } from "./contracts.js";
 import type { StateStore } from "./state.js";

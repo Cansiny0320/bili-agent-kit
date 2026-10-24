@@ -1,4 +1,3 @@
-// Adapted directly from dsh-bili-whale v0.4.6 tools/lib/bili-api.mjs (MIT).
 import { createHash } from "node:crypto";
 import { KitError } from "./errors.js";
 const MIXIN = [

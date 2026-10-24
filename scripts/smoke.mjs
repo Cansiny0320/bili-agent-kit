@@ -108,8 +108,14 @@ assert.equal(invalid.status, 2);
 assert.equal(JSON.parse(invalid.stdout).ok, false);
 for (const pkg of ["core", "cli", "mcp"]) {
   const location = join(work, `node_modules/@bili-agent-kit/${pkg}`);
-  assert.match(await readFile(join(location, "LICENSE"), "utf8"), /ALTERSSSS/);
-  assert.match(await readFile(join(location, "NOTICE.md"), "utf8"), /3e11454/);
+  assert.equal(
+    await readFile(join(location, "LICENSE"), "utf8"),
+    await readFile(join(root, "LICENSE"), "utf8"),
+  );
+  assert.equal(
+    await readFile(join(location, "NOTICE.md"), "utf8"),
+    await readFile(join(root, "NOTICE.md"), "utf8"),
+  );
   const manifest = JSON.parse(await readFile(join(location, "package.json"), "utf8"));
   await readFile(join(location, manifest.exports["."].types));
 }

@@ -2,9 +2,9 @@
 
 批准来源：用户已明确要求按通用工具库方案实施，保存在 `D:\code\bili-agent-kit`，创建 `Cansiny0320/bili-agent-kit` 公开仓库。本文忠实记录已批准范围。
 
-## 范围与来源
+## 范围
 
-直接基于 Alterssss/dsh-bili-whale v0.4.6 (`3e11454a5961300aa7094df0f08e630bd39999dd`) 的 B 站协议实现拆分，不依赖其他移植项目。保留 MIT 许可与修改记录。提供严格 TypeScript SDK、JSON CLI、stdio MCP，共用核心。无网页、云服务、模型、人格、调度器、Codex 登录或 DSH 宿主依赖。
+提供严格 TypeScript SDK、JSON CLI、stdio MCP，共用 B 站协议核心。保留 MIT 许可。无网页、云服务、模型、人格、调度器或 Codex 登录依赖。
 
 使用 pnpm workspace、Vite+（Oxlint/Oxfmt）、packages/core、packages/cli、packages/mcp。Node 22.18+ / 24.11+ / 26+；依赖锁定到经核查的版本。
 

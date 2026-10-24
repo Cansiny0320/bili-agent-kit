@@ -1,6 +1,6 @@
 # Contributing
 
-Use a supported Node version and pnpm 12.15.0. Keep protocol behavior in `packages/core`; adapters must share the operation schemas. Preserve upstream notices and document any additional source used.
+Use a supported Node version and pnpm 12.15.0. Keep protocol behavior in `packages/core`; adapters must share the operation schemas. Preserve required copyright and license notices and document any additional source used.
 
 Before submitting a change, run `pnpm check`, `pnpm test`, `pnpm build`, and `pnpm smoke`. Run `pnpm fmt` explicitly when formatting is needed; it writes files. The build writes package `dist` directories and copies license notices. Smoke checks create temporary package installs and may download public dependencies. Do not use real credentials or send Bilibili messages in tests.
 

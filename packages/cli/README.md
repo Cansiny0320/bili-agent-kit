@@ -22,4 +22,4 @@ Scan with the Bilibili app and confirm on your phone. QR/progress goes to stderr
 
 Writes are disabled by default. Administrator commands must be separated from model-controlled shell access. See [operations/configuration](https://github.com/Cansiny0320/bili-agent-kit/blob/main/docs/usage.md) and [security/recovery](https://github.com/Cansiny0320/bili-agent-kit/blob/main/SECURITY.md).
 
-MIT; upstream attribution is included in LICENSE and NOTICE.md. Not affiliated with Bilibili.
+MIT; see LICENSE and NOTICE.md. Not affiliated with Bilibili.

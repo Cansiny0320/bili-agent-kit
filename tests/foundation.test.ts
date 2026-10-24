@@ -5,8 +5,8 @@ import { join } from "node:path";
 import { signWbi } from "../packages/core/src/wbi.js";
 import { FileStore } from "../packages/core/src/state.js";
 
-describe("upstream WBI protocol", () => {
-  it("matches the original v0.4.6 implementation and strips forbidden value characters", () => {
+describe("WBI protocol", () => {
+  it("matches the expected signature and strips forbidden value characters", () => {
     const keys = {
       img_url: "https://i0.hdslb.com/bfs/wbi/7cd084941338484aae1ad9425b84077c.png",
       sub_url: "https://i0.hdslb.com/bfs/wbi/4932caff0ff746eab6f01bf08b70ac45.png",

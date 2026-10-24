@@ -11,8 +11,6 @@
 
 bili-agent-kit 是独立的 B 站工具库，提供 TypeScript SDK、JSON CLI 和 MCP。三种入口共用读取、审批、限流与发送逻辑，可以接入支持 MCP 的 Agent，也可以直接嵌入自己的程序。
 
-直接基于 [dsh-bili-whale](https://github.com/Alterssss/dsh-bili-whale) v0.4.6 拆分；无需 Codex 登录、DSH 宿主或指定模型。
-
 ## 能做什么
 
 - **读取内容**：视频信息、搜索结果、官方字幕、评论、可信对象的私信，以及直播房间和近期弹幕。
@@ -22,21 +20,34 @@ bili-agent-kit 是独立的 B 站工具库，提供 TypeScript SDK、JSON CLI �
 
 ## 快速开始
 
-需要 Node.js **22.18+、24.11+ 或 26+** 和 pnpm **12.15.0**。Node 23/25 不在支持范围。当前通过源码使用，尚未发布到 npm。
+需要 Node.js **22.18+、24.11+ 或 26+**。Node 23/25 不在支持范围。三个包已发布到 npm，当前版本均为 **0.1.0**；直接使用不需要克隆仓库或安装 pnpm。
+
+| 包                                                                         | 用途                                      |
+| -------------------------------------------------------------------------- | ----------------------------------------- |
+| [@bili-agent-kit/core](https://www.npmjs.com/package/@bili-agent-kit/core) | 在 TypeScript / JavaScript 程序中使用 SDK |
+| [@bili-agent-kit/cli](https://www.npmjs.com/package/@bili-agent-kit/cli)   | 命令行调用、扫码登录和管理员操作          |
+| [@bili-agent-kit/mcp](https://www.npmjs.com/package/@bili-agent-kit/mcp)   | 接入支持 stdio MCP 的 Agent               |
 
 ```sh
-git clone https://github.com/Cansiny0320/bili-agent-kit.git
-cd bili-agent-kit
-pnpm install --frozen-lockfile
-pnpm build
-cp examples/config.json config.local.json
-node packages/cli/dist/main.mjs help
+npx --yes @bili-agent-kit/cli@0.1.0 help
 ```
+
+创建 `config.local.json`，供 CLI 和 MCP 共用：
+
+```json
+{
+  "version": 1,
+  "stateDir": "./.bili-agent-kit",
+  "credentialsFile": "./credentials.local.json"
+}
+```
+
+配置中的路径相对配置文件所在目录解析。写入默认关闭；凭据文件尚不存在时，可以匿名读取公开内容。完整配置示例见 [examples/config.json](examples/config.json)。
 
 读取视频信息：
 
 ```sh
-node packages/cli/dist/main.mjs --config config.local.json video '{"bvid":"BV1xx411c7mD"}'
+npx --yes @bili-agent-kit/cli@0.1.0 --config config.local.json video '{"bvid":"BV1xx411c7mD"}'
 ```
 
 CLI 只向 stdout 输出 JSON。每个结果都有 `version: 1` 和 `ok`；失败时返回错误码并以非零状态退出。支持用 `-` 从 stdin 读取 JSON。
@@ -46,39 +57,46 @@ CLI 只向 stdout 输出 JSON。每个结果都有 `version: 1` 和 `ok`；失�
 示例配置已指定 `credentialsFile`。在管理员终端运行：
 
 ```sh
-node packages/cli/dist/main.mjs --config config.local.json auth.login '{}'
-node packages/cli/dist/main.mjs --config config.local.json auth.status '{}'
-node packages/cli/dist/main.mjs --config config.local.json auth.logout '{}'
+npx --yes @bili-agent-kit/cli@0.1.0 --config config.local.json auth.login '{}'
+npx --yes @bili-agent-kit/cli@0.1.0 --config config.local.json auth.status '{}'
 ```
 
 二维码和进度显示在 stderr，用哔哩哔哩 App 扫码并在手机确认。需要图片时，将登录参数改为 `'{"png":"login-qr.png"}'`，路径相对当前工作目录，目标文件必须不存在。二维码最多等待 3 分钟，Ctrl+C 取消；失败保留旧凭据。
 
 凭据以受限权限保存为本地明文 JSON，成功验证后才替换。退出仅删除这个本地文件，不撤销其他设备会话、不删除历史状态。登录不会开启发送权限或解除风控暂停。已有 MCP 进程会在下一次操作时读取同一文件。
 
+需要退出时再运行：
+
+```sh
+npx --yes @bili-agent-kit/cli@0.1.0 --config config.local.json auth.logout '{}'
+```
+
 ### 接入 MCP
 
-在宿主的 MCP 配置中启动本地入口，替换成实际绝对路径：
+在宿主的 MCP 配置中使用 npm 包，将配置文件路径替换成实际绝对路径。需要登录时，先用上面的 CLI 命令对同一份配置扫码登录：
 
 ```json
 {
   "mcpServers": {
     "bilibili": {
-      "command": "node",
-      "args": [
-        "/absolute/path/bili-agent-kit/packages/mcp/dist/main.mjs",
-        "--config",
-        "/absolute/path/bili-agent-kit/config.local.json"
-      ]
+      "command": "npx",
+      "args": ["--yes", "@bili-agent-kit/mcp@0.1.0", "--config", "/absolute/path/config.local.json"]
     }
   }
 }
 ```
 
-Windows 路径可以使用 `D:/code/bili-agent-kit/...`。MCP 提供 14 个工具，不提供批准、策略修改、凭据管理或解除暂停工具。
+Windows 路径可以使用 `D:/bilibili/config.local.json`。MCP 提供 14 个工具，不提供批准、策略修改、凭据管理或解除暂停工具。
 
 ### 使用 SDK
 
-在工作区中引用 `@bili-agent-kit/core`，也可从构建后的 `packages/core/dist/index.mjs` 导入：
+在自己的项目中安装 SDK：
+
+```sh
+npm install @bili-agent-kit/core@0.1.0
+```
+
+使用 ESM 导入，读取公开视频信息：
 
 ```ts
 import { BiliKit, FileStore } from "@bili-agent-kit/core";
@@ -88,7 +106,7 @@ const video = await kit.reads.video({ bvid: "BV1xx411c7mD" });
 console.log(video.title);
 ```
 
-凭据、状态存储、网络请求和时钟均可注入；只读临时会话可用 `MemoryStore`，外部写入要求持久存储。详细配置和全部操作见 [使用说明](docs/usage.md)。
+如需复用 CLI/MCP 的配置和登录状态，从同一包导入 `loadKit`，使用 `const kit = await loadKit("./config.local.json")`。凭据、状态存储、网络请求和时钟均可注入；只读临时会话可用 `MemoryStore`，外部写入要求持久存储。详细配置和全部操作见 [使用说明](docs/usage.md)。
 
 ## 审批与数据
 
@@ -100,18 +118,25 @@ Cookie 只从显式配置或 SDK provider 取得，不扫描浏览器或用户�
 
 ## 开发与验证
 
+从源码开发需要 pnpm **12.15.0**：
+
 ```sh
+git clone https://github.com/Cansiny0320/bili-agent-kit.git
+cd bili-agent-kit
+pnpm install --frozen-lockfile
 pnpm check
 pnpm test
 pnpm build
 pnpm smoke
 ```
 
+构建后可用 `node packages/cli/dist/main.mjs help` 调用本地 CLI；读取或登录时仍需显式传入配置文件。
+
 `pnpm fmt` 会修改格式。测试使用模拟网络；`smoke` 打包三个包、独立安装并验证 SDK、CLI 和 MCP stdio。没有用真实账号发送消息。B 站接口可能变化，模拟测试不保证真实账号可用。直播读取为近期历史快照；当前没有常驻 WebSocket 监听或自动调度器。
 
-## 来源与许可
+## 许可
 
-使用 [MIT License](LICENSE)，保留原版作者 ALTERSSSS 的许可。原版提交、迁移对应关系和第三方说明见 [NOTICE](NOTICE.md)。本项目与 Bilibili 官方无关联。
+使用 [MIT License](LICENSE)，第三方组件说明见 [NOTICE](NOTICE.md)。本项目与 Bilibili 官方无关联。
 
 ## 赞助
 

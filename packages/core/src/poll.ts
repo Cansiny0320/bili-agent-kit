@@ -1,4 +1,3 @@
-// Sequence pagination and same-second dedup adapted from upstream dm-history.mjs.
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import { id, parse, type Cursor, type Message } from "./contracts.js";
