@@ -1,0 +1,13 @@
+packages:
+  - packages/*
+minimumReleaseAge: 1440
+onlyBuiltDependencies:
+  - vite-plus
+overrides:
+  vite@*: npm:@voidzero-dev/vite-plus-core@1.4.0
+  vitest@*: 5.0.5
+# Vite+ core implements the Vite API under its own 1.4.0 package version.
+peerDependencyRules:
+  allowedVersions:
+    "@vitest/mocker>vite": "1.4.0"
+    "vitest>vite": "1.4.0"

@@ -1,0 +1,24 @@
+{
+  "name": "bili-agent-kit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r build && node scripts/licenses.mjs",
+    "check": "vp check && tsc --noEmit",
+    "fmt": "vp fmt",
+    "test": "vp test run",
+    "smoke": "node scripts/smoke.mjs"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "@types/node": "^24.0.0",
+    "typescript": "7.0.2",
+    "vite-plus": "1.4.0",
+    "zod": "4.6.7"
+  },
+  "engines": {
+    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
+  },
+  "packageManager": "pnpm@12.15.0"
+}

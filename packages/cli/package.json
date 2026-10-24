@@ -1,0 +1,35 @@
+{
+  "name": "@bili-agent-kit/cli",
+  "version": "0.1.0",
+  "description": "JSON CLI for bili-agent-kit",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Cansiny0320/bili-agent-kit.git",
+    "directory": "packages/cli"
+  },
+  "bin": {
+    "bili-agent": "dist/main.mjs"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "NOTICE.md"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "vp pack"
+  },
+  "dependencies": {
+    "@bili-agent-kit/core": "workspace:*"
+  },
+  "engines": {
+    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
+  }
+}

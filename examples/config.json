@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "stateDir": "./.bili-agent-kit",
+  "policy": {
+    "writesEnabled": false,
+    "allowedTargets": [],
+    "trustedDmTargets": []
+  }
+}

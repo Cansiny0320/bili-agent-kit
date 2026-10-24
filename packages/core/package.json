@@ -1,0 +1,32 @@
+{
+  "name": "@bili-agent-kit/core",
+  "version": "0.1.0",
+  "description": "Harness-independent Bilibili SDK with persistent safety controls",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Cansiny0320/bili-agent-kit.git",
+    "directory": "packages/core"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "NOTICE.md"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "vp pack"
+  },
+  "dependencies": {
+    "zod": "4.6.7"
+  },
+  "engines": {
+    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
+  }
+}

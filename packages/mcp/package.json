@@ -1,0 +1,37 @@
+{
+  "name": "@bili-agent-kit/mcp",
+  "version": "0.1.0",
+  "description": "stdio MCP server for bili-agent-kit",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Cansiny0320/bili-agent-kit.git",
+    "directory": "packages/mcp"
+  },
+  "bin": {
+    "bili-agent-mcp": "dist/main.mjs"
+  },
+  "files": [
+    "dist",
+    "LICENSE",
+    "NOTICE.md"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "vp pack"
+  },
+  "dependencies": {
+    "@bili-agent-kit/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "4.6.7"
+  },
+  "engines": {
+    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
+  }
+}

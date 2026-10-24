@@ -1,0 +1,13 @@
+node_modules/
+dist/
+coverage/
+.bili-agent-kit/
+.env*
+!.env.example
+*.tgz
+*.tsbuildinfo
+credentials*.json
+config.local.json
+state.json*
+/packages/*/LICENSE
+/packages/*/NOTICE.md
