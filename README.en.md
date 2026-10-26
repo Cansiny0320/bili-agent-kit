@@ -11,20 +11,26 @@
 
 ## Supported capabilities
 
-| Capability                                                       | MCP | CLI | SDK |
-| ---------------------------------------------------------------- | :-: | :-: | :-: |
-| Video search, rankings, creator uploads, collections and series  |  ✓  |  ✓  |  ✓  |
-| Subtitles, comments, danmaku, posts and articles                 |  ✓  |  ✓  |  ✓  |
-| Media downloads, trimming, timestamped frames and contact sheets |  ✓  |  ✓  |  ✓  |
-| Local ASR, subtitle and article export                           |  ✓  |  ✓  |  ✓  |
-| Favorite folders and watch later                                 |  ✓  |  ✓  |  ✓  |
-| DMs, notifications, comments and new-upload events               |  ✓  |  ✓  |  ✓  |
-| Likes, coins, triple actions, follows, comments, DMs and danmaku |  ✓  |  ✓  |  ✓  |
-| Text and image post creation, editing and deletion               |  ✓  |  ✓  |  ✓  |
-| Official creator data, video and article submissions             |  ✓  |  ✓  |  ✓  |
-| Official Webhook and live event consumption                      |  ✓  |  ✓  |  ✓  |
-| QR login, Cookie/OAuth management and action approval            |  —  |  ✓  |  ✓  |
-| Official Webhook ingestion and live connections                  |  —  |  —  |  ✓  |
+<table>
+  <thead>
+    <tr><th width="100%" align="left">Capability</th><th>MCP</th><th>CLI</th><th>SDK</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Video search, rankings, creator uploads, collections and series</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>Subtitles, comments, danmaku, posts and articles</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>Media downloads, trimming, timestamped frames and contact sheets</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>Local ASR, subtitle and article export</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>Favorite folders and watch later</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>DMs, notifications, comments and new-upload events</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>Likes, coins, triple actions, follows, comments, DMs and danmaku</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>Text and image post creation, editing and deletion</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>Official creator data, video and article submissions</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>Official Webhook and live event consumption</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>QR login</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>Cookie/OAuth management and action approval</td><td align="center">—</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>Official Webhook ingestion and live connections</td><td align="center">—</td><td align="center">—</td><td align="center">✓</td></tr>
+  </tbody>
+</table>
 
 See the [usage reference](docs/usage.md) for parameters and the [changelog](CHANGELOG.md) for version history.
 
@@ -34,23 +40,15 @@ Writes require approval, and media processing requires the corresponding depende
 
 Requires Node.js **22.18+, 24.11+ or 26+**. Node.js 23/25 are unsupported.
 
+Automatic configuration and MCP QR login are not yet published to npm; [build from source](docs/usage.md#开发与验证) to use them. npm `0.3.0` still requires an explicit config.
+
 | Package                                                                    | Purpose                                         |
 | -------------------------------------------------------------------------- | ----------------------------------------------- |
 | [@bili-agent-kit/core](https://www.npmjs.com/package/@bili-agent-kit/core) | SDK for TypeScript / JavaScript applications    |
 | [@bili-agent-kit/cli](https://www.npmjs.com/package/@bili-agent-kit/cli)   | Terminal and script access, login and approvals |
 | [@bili-agent-kit/mcp](https://www.npmjs.com/package/@bili-agent-kit/mcp)   | Connect AI assistants through stdio MCP         |
 
-Create `config.local.json` for both CLI and MCP:
-
-```json
-{
-  "version": 1,
-  "stateDir": "./.bili-agent-kit",
-  "credentialsFile": "./credentials.local.json"
-}
-```
-
-Paths are relative to the config file's directory. You can read public content without logging in. Actions such as liking or sending messages are disabled by default. See [examples/config.json](examples/config.json) for more options.
+CLI and MCP automatically share configuration and login state under `~/.bili-agent-kit/`. Public reads work without login; writes are disabled by default. Use `--config <file>` for an existing or custom configuration; see the [usage reference](docs/usage.md#配置).
 
 ### Command line
 
@@ -58,7 +56,7 @@ List the available commands, then try reading a video's metadata:
 
 ```sh
 npx --yes @bili-agent-kit/cli@latest help
-npx --yes @bili-agent-kit/cli@latest --config config.local.json video '{"bvid":"BV1xx411c7mD"}'
+npx --yes @bili-agent-kit/cli@latest video '{"bvid":"BV1xx411c7mD"}'
 ```
 
 The CLI returns JSON for use in scripts.
@@ -68,35 +66,30 @@ The CLI returns JSON for use in scripts.
 To read account content or interact with others, first log in from your terminal:
 
 ```sh
-npx --yes @bili-agent-kit/cli@latest --config config.local.json auth.login '{}'
-npx --yes @bili-agent-kit/cli@latest --config config.local.json auth.status '{}'
+npx --yes @bili-agent-kit/cli@latest auth.login
+npx --yes @bili-agent-kit/cli@latest auth.status
 ```
 
-Scan the QR code with the Bilibili app and confirm on your phone. Credentials are saved to `credentials.local.json`. The CLI and MCP server share the login when they use the same config.
+Scan the QR code with the Bilibili app and confirm on your phone. Credentials are saved to `~/.bili-agent-kit/credentials.json` and shared with MCP. An existing valid login is reused.
 
 See the [login guide](docs/usage.md#扫码登录与刷新) to save the QR code as an image, refresh cookies or log out.
 
 ### Connect over MCP
 
-Add this to your AI assistant's MCP configuration and replace the config path with an absolute path on your computer. If login is needed, run the QR login command above first:
+Add this to your AI assistant's MCP configuration:
 
 ```json
 {
   "mcpServers": {
     "bilibili": {
       "command": "npx",
-      "args": [
-        "--yes",
-        "@bili-agent-kit/mcp@latest",
-        "--config",
-        "/absolute/path/config.local.json"
-      ]
+      "args": ["--yes", "@bili-agent-kit/mcp@latest"]
     }
   }
 }
 ```
 
-On Windows, paths can use `D:/bilibili/config.local.json`.
+Ask your assistant to log in to Bilibili: `bili_auth_login` returns a QR image, `bili_auth_status` checks progress, and `bili_auth_cancel` cancels the pending login. Confirm the scan in the Bilibili app. No separate CLI login is needed.
 
 ### Use the SDK
 
@@ -116,7 +109,7 @@ const video = await kit.reads.video({ bvid: "BV1xx411c7mD" });
 console.log(video.title);
 ```
 
-To share CLI/MCP configuration and login state, import `loadKit` from the same package and call `await loadKit("./config.local.json")`. See the [usage reference](docs/usage.md) for the full API.
+To share CLI/MCP configuration and login state, import `loadKit` from the same package and call `await loadKit()`. See the [usage reference](docs/usage.md) for the full API.
 
 ## License
 

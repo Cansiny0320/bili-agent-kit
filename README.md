@@ -11,20 +11,26 @@
 
 ## 支持能力
 
-| 能力                                         | MCP | CLI | SDK |
-| -------------------------------------------- | :-: | :-: | :-: |
-| 视频搜索、热门排行、UP 投稿、合集与系列      |  ✓  |  ✓  |  ✓  |
-| 字幕、评论、弹幕、动态与专栏读取             |  ✓  |  ✓  |  ✓  |
-| 音视频下载、裁剪、定点抽帧与拼图             |  ✓  |  ✓  |  ✓  |
-| 本地 ASR 转写、字幕与文章导出                |  ✓  |  ✓  |  ✓  |
-| 收藏夹与稍后再看管理                         |  ✓  |  ✓  |  ✓  |
-| 私信、通知、评论与投稿增量事件               |  ✓  |  ✓  |  ✓  |
-| 点赞、投币、三连、关注、评论、私信与弹幕发送 |  ✓  |  ✓  |  ✓  |
-| 文字与图文动态发布、编辑、删除               |  ✓  |  ✓  |  ✓  |
-| 官方创作数据、视频与文章投稿管理             |  ✓  |  ✓  |  ✓  |
-| 官方 Webhook 与直播事件消费                  |  ✓  |  ✓  |  ✓  |
-| 扫码登录、Cookie/OAuth 管理与操作审批        |  —  |  ✓  |  ✓  |
-| 官方 Webhook 接收与直播连接                  |  —  |  —  |  ✓  |
+<table>
+  <thead>
+    <tr><th width="100%" align="left">能力</th><th>MCP</th><th>CLI</th><th>SDK</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>视频搜索、热门排行、UP 投稿、合集与系列</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>字幕、评论、弹幕、动态与专栏读取</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>音视频下载、裁剪、定点抽帧与拼图</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>本地 ASR 转写、字幕与文章导出</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>收藏夹与稍后再看管理</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>私信、通知、评论与投稿增量事件</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>点赞、投币、三连、关注、评论、私信与弹幕发送</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>文字与图文动态发布、编辑、删除</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>官方创作数据、视频与文章投稿管理</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>官方 Webhook 与直播事件消费</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>扫码登录</td><td align="center">✓</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>Cookie/OAuth 管理与操作审批</td><td align="center">—</td><td align="center">✓</td><td align="center">✓</td></tr>
+    <tr><td>官方 Webhook 接收与直播连接</td><td align="center">—</td><td align="center">—</td><td align="center">✓</td></tr>
+  </tbody>
+</table>
 
 详细参数见 [使用说明](docs/usage.md)，版本变化见 [更新记录](CHANGELOG.md)。
 
@@ -34,23 +40,15 @@
 
 需要 Node.js **22.18+、24.11+ 或 26+**，不支持 Node.js 23/25。
 
+以下免配置登录与 MCP 扫码入口尚未发布到 npm，当前需[从源码构建](docs/usage.md#开发与验证)；npm `0.3.0` 仍需显式配置。
+
 | 包                                                                         | 用途                                      |
 | -------------------------------------------------------------------------- | ----------------------------------------- |
 | [@bili-agent-kit/core](https://www.npmjs.com/package/@bili-agent-kit/core) | 在 TypeScript / JavaScript 程序中使用 SDK |
 | [@bili-agent-kit/cli](https://www.npmjs.com/package/@bili-agent-kit/cli)   | 在终端或脚本中调用，管理登录和操作确认    |
 | [@bili-agent-kit/mcp](https://www.npmjs.com/package/@bili-agent-kit/mcp)   | 接入支持 stdio MCP 的 AI 助手             |
 
-创建 `config.local.json`，供 CLI 和 MCP 共用：
-
-```json
-{
-  "version": 1,
-  "stateDir": "./.bili-agent-kit",
-  "credentialsFile": "./credentials.local.json"
-}
-```
-
-路径相对配置文件所在目录。未登录时可以读取公开内容，点赞、发送消息等操作默认关闭。更多配置见 [examples/config.json](examples/config.json)。
+CLI 和 MCP 默认共用 `~/.bili-agent-kit/` 下自动创建的配置和登录状态。未登录时可读取公开内容，写操作默认关闭。已有或自定义配置仍可通过 `--config <file>` 指定，见[使用说明](docs/usage.md#配置)。
 
 ### 命令行
 
@@ -58,7 +56,7 @@
 
 ```sh
 npx --yes @bili-agent-kit/cli@latest help
-npx --yes @bili-agent-kit/cli@latest --config config.local.json video '{"bvid":"BV1xx411c7mD"}'
+npx --yes @bili-agent-kit/cli@latest video '{"bvid":"BV1xx411c7mD"}'
 ```
 
 CLI 返回 JSON，方便在脚本中使用。
@@ -68,35 +66,30 @@ CLI 返回 JSON，方便在脚本中使用。
 需要读取账号内容或执行互动时，先在终端登录：
 
 ```sh
-npx --yes @bili-agent-kit/cli@latest --config config.local.json auth.login '{}'
-npx --yes @bili-agent-kit/cli@latest --config config.local.json auth.status '{}'
+npx --yes @bili-agent-kit/cli@latest auth.login
+npx --yes @bili-agent-kit/cli@latest auth.status
 ```
 
-用哔哩哔哩 App 扫码，在手机上确认即可。登录信息会保存到 `credentials.local.json`，CLI 和 MCP 使用同一份配置就能共用登录状态。
+用哔哩哔哩 App 扫码并确认，登录信息会保存到 `~/.bili-agent-kit/credentials.json`，MCP 可直接复用。已经登录且有效时会返回当前账号。
 
 保存二维码图片、刷新 Cookie 和退出登录的方法见 [登录说明](docs/usage.md#扫码登录与刷新)。
 
 ### 接入 MCP
 
-把下面的配置加入 AI 助手，将配置文件路径替换成你电脑上的绝对路径。需要登录时，先运行上面的扫码登录命令：
+把下面的配置加入 AI 助手：
 
 ```json
 {
   "mcpServers": {
     "bilibili": {
       "command": "npx",
-      "args": [
-        "--yes",
-        "@bili-agent-kit/mcp@latest",
-        "--config",
-        "/absolute/path/config.local.json"
-      ]
+      "args": ["--yes", "@bili-agent-kit/mcp@latest"]
     }
   }
 }
 ```
 
-Windows 路径可以写成 `D:/bilibili/config.local.json`。
+需要登录时，直接让助手调用 `bili_auth_login` 展示二维码，用 B 站 App 扫码确认。`bili_auth_status` 查看结果，`bili_auth_cancel` 取消本次扫码，无需先去终端登录。
 
 ### 使用 SDK
 
@@ -116,7 +109,7 @@ const video = await kit.reads.video({ bvid: "BV1xx411c7mD" });
 console.log(video.title);
 ```
 
-如需共用 CLI/MCP 的配置和登录状态，从同一包导入 `loadKit`，调用 `await loadKit("./config.local.json")`。完整 API 见 [使用说明](docs/usage.md)。
+如需共用 CLI/MCP 的配置和登录状态，从同一包导入 `loadKit`，调用 `await loadKit()`。完整 API 见 [使用说明](docs/usage.md)。
 
 ## 许可
 

@@ -13,7 +13,7 @@ import { runAuthCli, type AuthCliOptions } from "./auth.js";
 export async function runCli(
   argv: string[],
   stdin: () => Promise<string>,
-  load: (path: string) => Promise<BiliKit> = loadKit,
+  load: (path?: string) => Promise<BiliKit> = loadKit,
   authOptions: AuthCliOptions = {},
 ): Promise<Envelope<unknown>> {
   if (argv.length === 1 && ["help", "--help", "list"].includes(argv[0] ?? ""))
@@ -22,7 +22,7 @@ export async function runCli(
       ok: true,
       data: {
         usage:
-          "bili-agent --config config.local.json <operation|auth.login|auth.status|auth.logout|auth.refresh-check|auth.refresh|open.auth.begin|open.auth.exchange|open.auth.refresh|open.auth.status|open.auth.logout|admin.approve|admin.reconcile|admin.resume> <JSON|->",
+          "bili-agent [--config <file>] <operation|auth.login|auth.status|auth.logout|auth.refresh-check|auth.refresh|open.auth.begin|open.auth.exchange|open.auth.refresh|open.auth.status|open.auth.logout|admin.approve|admin.reconcile|admin.resume> [<JSON|->]",
         auth: {
           "auth.login": { png: "optional new PNG path" },
           "auth.status": {},
@@ -44,13 +44,22 @@ export async function runCli(
       },
     };
   return envelope(async () => {
-    if (argv[0] !== "--config" || !argv[1] || !argv[2] || argv.length !== 4)
+    const explicit = argv[0] === "--config";
+    const args = explicit ? argv.slice(2) : argv;
+    if (
+      (explicit && !argv[1]) ||
+      args.length < 1 ||
+      args.length > 2 ||
+      !args[0] ||
+      args[0].startsWith("-")
+    )
       throw new KitError(
         "INVALID_INPUT",
-        "Expected --config <file> <operation> <JSON|->. Use help for schemas.",
+        "Expected [--config <file>] <operation> [<JSON|->]. Use help for schemas.",
       );
-    const [, , name, argument] = argv;
-    const raw = argument === "-" ? await stdin() : (argument ?? "");
+    const config = explicit ? argv[1] : undefined;
+    const [name, argument] = args;
+    const raw = argument === "-" ? await stdin() : (argument ?? "{}");
     if (raw.length > 1024 * 1024) throw new KitError("INVALID_INPUT", "JSON input exceeds 1 MiB.");
     let input: unknown;
     try {
@@ -58,9 +67,9 @@ export async function runCli(
     } catch {
       throw new KitError("INVALID_INPUT", "Input must be valid JSON.");
     }
-    if (name?.startsWith("auth.")) return runAuthCli(argv[1], name, input, authOptions);
-    if (name?.startsWith("open.auth.")) return (await loadOpenAuth(argv[1])).call(name, input);
-    const kit = await load(argv[1]);
+    if (name?.startsWith("auth.")) return runAuthCli(config, name, input, authOptions);
+    if (name?.startsWith("open.auth.")) return (await loadOpenAuth(config)).call(name, input);
+    const kit = await load(config);
     if (name?.startsWith("admin.")) {
       if (!input || typeof input !== "object" || Array.isArray(input))
         throw new KitError("INVALID_INPUT", "Admin input must be an object.");

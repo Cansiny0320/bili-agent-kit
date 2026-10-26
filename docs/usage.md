@@ -1,12 +1,14 @@
 # 使用说明
 
-本页对应 `0.3.0`。CLI、MCP 和 SDK 共用 core 的操作定义。`help` / `list` 返回完整输入 schema，MCP 工具名为 CLI 名称加 `bili_` 前缀。所有 ID 使用字符串，页码和数量使用数字。
+本页对应当前源码；默认配置和 MCP 扫码登录尚未包含在 npm `0.3.0` 中。CLI、MCP 和 SDK 共用 core 的操作定义。`help` / `list` 返回完整输入 schema，MCP 工具名为 CLI 名称加 `bili_` 前缀。所有 ID 使用字符串，页码和数量使用数字。
 
 新增的合集、收藏管理、时间素材、ASR、增量事件和官方授权/推送见 [能力扩展说明](agent-capabilities.md)。
 
 ## 配置
 
-CLI 和 MCP 必须传入 `--config <file>`。路径相对配置文件目录；`ffmpegPath` 可以是可执行文件名或绝对路径。不扫描浏览器或默认用户目录。
+CLI、MCP 和 `loadKit()` / `loadAuth()` 省略配置时，会在用户主目录自动创建 `~/.bili-agent-kit/config.json`，默认凭据为同目录 `credentials.json`，状态为 `state/`。不依赖启动时的工作目录，也不会导入已有项目配置或浏览器 Cookie。并发启动不会覆盖已有配置。
+
+`--config <file>` 优先使用指定配置；文件缺失或无效时直接报错，不回退到另一个账号。已有项目登录继续传入原配置即可。Windows 默认目录为 `%USERPROFILE%\.bili-agent-kit`。以下为自定义配置示例；路径相对配置文件目录，`ffmpegPath` 可以是可执行文件名或绝对路径。
 
 ```json
 {
@@ -31,21 +33,21 @@ CLI 和 MCP 必须传入 `--config <file>`。路径相对配置文件目录；`f
 在可信管理员终端运行：
 
 ```sh
-node packages/cli/dist/main.mjs --config config.local.json auth.login '{}'
-node packages/cli/dist/main.mjs --config config.local.json auth.status '{}'
-node packages/cli/dist/main.mjs --config config.local.json auth.refresh-check '{}'
-node packages/cli/dist/main.mjs --config config.local.json auth.refresh '{}'
+node packages/cli/dist/main.mjs auth.login
+node packages/cli/dist/main.mjs auth.status
+node packages/cli/dist/main.mjs auth.refresh-check
+node packages/cli/dist/main.mjs auth.refresh
 ```
 
-仍然使用哔哩哔哩 App 扫码并确认。二维码和进度输出到 stderr，stdout 只包含 JSON。登录参数 `{"png":"login-qr.png"}` 可额外保存图片，文件不能已存在。扫码最多等待 3 分钟，每次轮询至少间隔 2 秒，Ctrl+C 取消。登录失败保留旧凭据。
+有效登录会直接返回当前账号；更换账号须先用 CLI `auth.logout` 退出。需要扫码时，使用哔哩哔哩 App 扫码并确认。二维码和进度输出到 stderr，stdout 只包含 JSON。登录参数 `{"png":"login-qr.png"}` 可额外保存图片，文件不能已存在。扫码最多等待 3 分钟，每次轮询至少间隔 2 秒，Ctrl+C 取消。登录失败保留旧凭据。
 
-QR 响应中的 `refresh_token` 会一并保存。`auth.refresh-check` 检查是否需要刷新；`auth.refresh` 按平台结果刷新 Cookie，没有后台自动刷新。旧凭据没有 refresh token 时，重新扫码即可补齐。新凭据必须验证为相同 UID 才能替换；替换后再确认旧 token 失效。中断恢复使用凭据旁的 `.refresh.json` 私有日志：已有新凭据时继续验证/确认；刷新请求结果不明时停止，不自动再次轮换，可重新扫码恢复。日志属于敏感文件。
+QR 响应中的 `refresh_token` 会一并保存。`auth.refresh-check` 检查是否需要刷新；`auth.refresh` 按平台结果刷新 Cookie，没有后台自动刷新。旧凭据没有 refresh token 时，可先退出再重新扫码补齐。新凭据必须验证为相同 UID 才能替换；替换后再确认旧 token 失效。中断恢复使用凭据旁的 `.refresh.json` 私有日志：已有新凭据时继续验证/确认；刷新请求结果不明时停止，不自动再次轮换，可重新扫码恢复。日志属于敏感文件。
 
 `auth.logout '{}'` 仅删除本地凭据和刷新日志，保留状态，不撤销其他设备会话。登录/刷新不会开启写权限、清除预算或解除暂停。运行中的 MCP 在后续操作中重新读凭据；进行中的请求使用已捕获的会话。
 
 文件为本地明文，写入使用 POSIX 0600 或仅当前用户可访问的 Windows ACL。凭据旁的 `.lock` 串行化登录、退出和刷新；异常遗留锁必须确认进程已退出后再处理。
 
-SDK 可使用 `loadAuth(configPath)` 的 `login`、`status`、`refreshCheck`、`refresh`、`logout`。`QrLogin.generate/poll/verify` 支持自定义 UI，低层 `poll` 成功结果含凭据，只能交给可信宿主。CLI 和 `FileAuth` 返回脱敏账号信息。MCP 不提供登录、刷新、审批或恢复管理工具。
+SDK 可使用 `loadAuth(configPath?)` 的 `login`、`status`、`refreshCheck`、`refresh`、`logout`。`QrLogin.generate/poll/verify` 支持自定义 UI，低层 `poll` 成功结果含凭据，只能交给可信宿主。CLI 和 `FileAuth` 返回脱敏账号信息。MCP 提供 `bili_auth_login`、`bili_auth_status`、`bili_auth_cancel`：开始登录立即返回原生 PNG 二维码，手机确认后保存凭据，状态查询返回进度或账号。重复启动复用当前二维码；取消、过期或连接关闭会结束本次等待并保留旧凭据。MCP 不提供退出、刷新、OAuth、审批或恢复管理工具。显式匿名配置未设置 `credentialsFile` 时不注册登录工具；嵌入式 SDK 可使用 `createMcpServer(kit, { auth: await loadAuth(configPath) })` 开启它们。
 
 ## 内容读取
 
@@ -229,7 +231,7 @@ state v1/v2 首次事务前备份为对应的 `state.v1.backup.json` 或 `state.
 {"version":1,"ok":false,"error":{"code":"APPROVAL_REQUIRED","message":"A current administrator approval is required."}}
 ```
 
-CLI 使用 `-` 从 stdin 读取 JSON；退出码为成功 `0`、输入错误 `2`、取消登录 `130`、其他失败 `1`。空轮询返回 `event: null`。MCP 返回 text 和 structuredContent，图片另用 image 内容块，stdout 仅用于 JSON-RPC。直接 SDK 方法抛出 `KitError`；`invoke/envelope` 返回上述 envelope。
+CLI 语法为 `[--config <file>] <command> [<JSON|->]`，省略 JSON 使用 `{}`，使用 `-` 从 stdin 读取 JSON；退出码为成功 `0`、输入错误 `2`、取消登录 `130`、其他失败 `1`。空轮询返回 `event: null`。MCP 返回 text 和 structuredContent，图片另用 image 内容块，stdout 仅用于 JSON-RPC。直接 SDK 方法抛出 `KitError`；`invoke/envelope` 返回上述 envelope。
 
 错误码包括 `CANCELLED`、`INVALID_INPUT`、`NOT_FOUND`、`AUTH_REQUIRED`、`FORBIDDEN`、`APPROVAL_REQUIRED`、`CONFLICT`、`UNKNOWN_OUTCOME`、`RATE_LIMITED`、`TRAFFIC_PAUSED`、`NETWORK`、`UPSTREAM`、`STATE_INVALID`、`STATE_BUSY`、`UNAVAILABLE`。错误不回显原始响应体、Cookie 或凭据提供器错误。
 
@@ -247,7 +249,7 @@ pnpm build
 pnpm smoke
 ```
 
-构建后可用 `node packages/cli/dist/main.mjs help` 调用本地 CLI；读取或登录时仍需显式传入配置文件。
+构建后可用 `node packages/cli/dist/main.mjs help` 调用本地 CLI；可直接运行 `auth.login`，也可通过 `--config` 复用原配置。
 
 `pnpm fmt` 会修改格式。测试使用模拟网络；`pnpm smoke` 会打包并安装三个包，检查 SDK、CLI 和 MCP 是否能正常使用。可通过 `BILI_TEST_FFMPEG` 指定本地 ffmpeg 运行真实媒体解码测试。真实账号、媒体与官方应用能力的验证范围见 [验收记录](verification.md)。
 

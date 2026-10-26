@@ -17,7 +17,7 @@ export {
   type State,
 } from "./contracts.js";
 export { invoke, operations, describeOperations, type OperationName } from "./operations.js";
-export { loadKit, loadAuth, loadOpenAuth, configSchema } from "./runtime.js";
+export { loadKit, loadAuth, loadOpenAuth, defaultConfigPath, configSchema } from "./runtime.js";
 export { OpenAuth, openAuthInputs } from "./open-auth.js";
 export { OpenEvents, openEventInput, openEventAckInput } from "./open-events.js";
 export {

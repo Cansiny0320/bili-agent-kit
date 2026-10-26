@@ -51,7 +51,21 @@ export class QrLogin {
     const wait = Math.max(0, this.#nextRequest - this.clock.now());
     // Reserve before awaiting so concurrent calls also respect the polling interval.
     this.#nextRequest = this.clock.now() + wait + 2000;
-    if (wait) await this.clock.sleep(wait);
+    if (wait) {
+      let abort: () => void = () => {};
+      try {
+        await Promise.race([
+          this.clock.sleep(wait),
+          new Promise<never>((_, reject) => {
+            abort = () => reject(new KitError("CANCELLED", "Login cancelled."));
+            if (signal?.aborted) abort();
+            else signal?.addEventListener("abort", abort, { once: true });
+          }),
+        ]);
+      } finally {
+        signal?.removeEventListener("abort", abort);
+      }
+    }
     checkCancelled(signal);
     try {
       const response = await this.fetcher(url, {

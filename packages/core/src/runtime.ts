@@ -1,8 +1,10 @@
-import { readFile, stat } from "node:fs/promises";
+import { link, mkdir, readFile, stat, unlink } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import { z } from "zod";
 import { parse, policySchema, systemClock } from "./contracts.js";
-import { FileCredentials } from "./credentials.js";
+import { FileCredentials, writePrivateFile } from "./credentials.js";
 import { FileAuth } from "./auth-runtime.js";
 import { QrLogin } from "./auth.js";
 import { KitError } from "./errors.js";
@@ -51,8 +53,44 @@ async function readJson(file: string): Promise<unknown> {
     throw new KitError("INVALID_INPUT", "Cannot read the configured JSON file.");
   }
 }
-export async function loadKit(configPath: string): Promise<BiliKit> {
-  const absolute = resolve(configPath),
+export function defaultConfigPath(): string {
+  return resolve(homedir(), ".bili-agent-kit", "config.json");
+}
+
+async function resolveConfig(configPath?: string): Promise<string> {
+  if (configPath !== undefined) return resolve(configPath);
+  const absolute = defaultConfigPath();
+  try {
+    await stat(absolute);
+    return absolute;
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+  }
+  await mkdir(dirname(absolute), { recursive: true, mode: 0o700 });
+  const temp = `${absolute}.${randomUUID()}.tmp`;
+  try {
+    await writePrivateFile(
+      temp,
+      JSON.stringify(
+        { version: 1, stateDir: "./state", credentialsFile: "./credentials.json" },
+        null,
+        2,
+      ) + "\n",
+    );
+    // Publish the complete file atomically without replacing a concurrent initializer.
+    try {
+      await link(temp, absolute);
+    } catch (error) {
+      if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
+    }
+  } finally {
+    await unlink(temp).catch(() => {});
+  }
+  return absolute;
+}
+
+export async function loadKit(configPath?: string): Promise<BiliKit> {
+  const absolute = await resolveConfig(configPath),
     base = dirname(absolute);
   const config = parse(configSchema, await readJson(absolute));
   return new BiliKit({
@@ -97,8 +135,8 @@ export async function loadKit(configPath: string): Promise<BiliKit> {
       : {}),
   });
 }
-export async function loadAuth(configPath: string, protocol = new QrLogin()): Promise<FileAuth> {
-  const absolute = resolve(configPath),
+export async function loadAuth(configPath?: string, protocol = new QrLogin()): Promise<FileAuth> {
+  const absolute = await resolveConfig(configPath),
     base = dirname(absolute);
   const config = parse(configSchema, await readJson(absolute));
   if (!config.credentialsFile)
@@ -121,8 +159,8 @@ export async function loadAuth(configPath: string, protocol = new QrLogin()): Pr
     );
   return new FileAuth(new FileCredentials(credentialPath), new FileStore(stateDir), protocol);
 }
-export async function loadOpenAuth(configPath: string): Promise<OpenAuth> {
-  const absolute = resolve(configPath),
+export async function loadOpenAuth(configPath?: string): Promise<OpenAuth> {
+  const absolute = await resolveConfig(configPath),
     base = dirname(absolute),
     config = parse(configSchema, await readJson(absolute));
   if (!config.openPlatform)

@@ -4,21 +4,13 @@ JSON command line interface for discovery, content, media, events, approved writ
 
 ```sh
 npx --yes @bili-agent-kit/cli@latest help
-npx --yes @bili-agent-kit/cli@latest --config ./config.local.json auth.login '{}'
-npx --yes @bili-agent-kit/cli@latest --config ./config.local.json auth.status '{}'
+npx --yes @bili-agent-kit/cli@latest auth.login
+npx --yes @bili-agent-kit/cli@latest auth.status
 ```
 
-Create `config.local.json` before login:
+Configuration is created automatically at `~/.bili-agent-kit/config.json`; credentials and state are shared with MCP. Keep using `--config <file>` for existing/custom configurations. JSON arguments are optional and default to `{}`.
 
-```json
-{
-  "version": 1,
-  "stateDir": "./.bili-agent-kit",
-  "credentialsFile": "./credentials.local.json"
-}
-```
-
-Scan with the Bilibili app and confirm on your phone. QR/progress goes to stderr; stdout contains JSON. Login can save a PNG with `'{"png":"login-qr.png"}'`. Credentials are stored as a local plaintext file with restricted permissions; failed login preserves the previous file. `auth.logout '{}'` removes only local credentials, preserving history and other devices' sessions.
+An existing valid login is reused. To change accounts, run `auth.logout` first. Scan with the Bilibili app and confirm on your phone. QR/progress goes to stderr; stdout contains JSON. Login can save a PNG with `'{"png":"login-qr.png"}'`. Credentials are stored as a local plaintext file with restricted permissions; failed login preserves the previous file. `auth.logout '{}'` removes only local credentials, preserving history and other devices' sessions.
 
 `help` lists the shared operation schemas. Trusted commands also include `auth.refresh-check` and `auth.refresh`; refresh is explicit, not scheduled. New interactions and open-platform submissions require action and target allowlists. Open-platform credentials are independent from QR login.
 

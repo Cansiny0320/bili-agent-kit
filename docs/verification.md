@@ -1,5 +1,14 @@
 # Verification record
 
+## 默认配置、MCP 登录与 README（2026-10-26，未发布）
+
+- 默认运行时在临时用户目录并发初始化成功，不覆盖既有配置；显式缺失或错误配置拒绝回退。CLI 省略配置、空 JSON 和 stdin 用法通过，help 不产生配置文件。
+- MCP 模拟协议测试验证原生 PNG 二维码、重复启动复用、有效账号复用、成功持久化、取消/过期/失败保留原凭据，以及关闭释放锁。失败后的状态查询可识别 CLI 后续写入的有效登录；输出不包含 Cookie、refresh token 或 challenge key。
+- Node 24.19.0 下 34 个文件、127 项测试全部通过，包含已有真实 FFmpeg/ASR 测试；check、TypeScript、三包构建和独立 pack/install smoke 通过。打包后的真实 CLI/MCP 子进程通过模拟网络验证无配置参数登录、不同工作目录共享账号，以及扫码等待中关闭 stdio 后释放锁。测试没有使用真实 B 站账号，也未读取或迁移用户现有凭据。
+- GitHub Markdown API 保留能力表首列 `width="100%"` 属性。浏览器使用 GitHub 同样的表格布局规则，中文和英文在 838px、343px 正文宽度下均铺满，无水平溢出。
+
+本次依赖安装和构建直接调用本机已有 pnpm 12.15.0 原生可执行文件，避免 macOS 上旧 pnpm 自动启动未执行安装脚本的包装入口时发生 ENOEXEC；没有更改全局 pnpm 或项目 packageManager。新增依赖仅为 MCP 显式使用现有 `qrcode@1.5.4`，锁文件只增加该引用。
+
 ## 能力扩展验收（2026-10-26）
 
 原八项能力和后续批准的收藏管理扩展均已接入本地代码，普通操作共用 SDK、CLI、MCP 合同；OAuth 管理、Webhook 接收和直播连接由可信宿主调用。本节记录 v0.3.0 的本地验收；发布是否成功和远端 CI 结果应以对应 tag 的 Release workflow 为准。

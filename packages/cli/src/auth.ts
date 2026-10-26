@@ -2,6 +2,7 @@ import QRCode from "qrcode";
 import { resolve } from "node:path";
 import {
   loadAuth,
+  defaultConfigPath,
   writePrivateFile,
   KitError,
   FileStore,
@@ -9,12 +10,12 @@ import {
 } from "@bili-agent-kit/core";
 
 export interface AuthCliOptions {
-  load?: (path: string) => Promise<FileAuth>;
+  load?: (path?: string) => Promise<FileAuth>;
   stderr?: (text: string) => void;
   signal?: AbortSignal;
 }
 export async function runAuthCli(
-  config: string,
+  config: string | undefined,
   name: string,
   input: unknown,
   options: AuthCliOptions = {},
@@ -38,10 +39,16 @@ export async function runAuthCli(
   if (name === "auth.refresh") return auth.refresh(options.signal);
   if (name === "auth.status") return auth.status(options.signal);
   if (name === "auth.logout") return auth.logout();
+  const current = await auth.status(options.signal);
+  if (current.authenticated) return current;
   if (typeof args.png === "string") {
     const normalize = (path: string) =>
       process.platform === "win32" ? resolve(path).toLowerCase() : resolve(path);
-    const reserved = [config, auth.credentials.path, `${auth.credentials.path}.lock`];
+    const reserved = [
+      config ?? defaultConfigPath(),
+      auth.credentials.path,
+      `${auth.credentials.path}.lock`,
+    ];
     if (auth.store instanceof FileStore)
       reserved.push(
         resolve(auth.store.directory, "state.json"),
