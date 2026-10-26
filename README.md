@@ -34,21 +34,15 @@
 
 详细参数见 [使用说明](docs/usage.md)，版本变化见 [更新记录](CHANGELOG.md)。
 
-写操作需审批，媒体处理需安装相应依赖。官方能力需应用授权，当前仅完成协议模拟验证；具体范围见[验证记录](docs/verification.md)。
-
 ## 快速开始
 
-需要 Node.js **22.18+、24.11+ 或 26+**，不支持 Node.js 23/25。
-
-以下免配置登录与 MCP 扫码入口尚未发布到 npm，当前需[从源码构建](docs/usage.md#开发与验证)；npm `0.3.0` 仍需显式配置。
+需要 Node.js **22.18+、24.11+ 或 26+**。
 
 | 包                                                                         | 用途                                      |
 | -------------------------------------------------------------------------- | ----------------------------------------- |
 | [@bili-agent-kit/core](https://www.npmjs.com/package/@bili-agent-kit/core) | 在 TypeScript / JavaScript 程序中使用 SDK |
 | [@bili-agent-kit/cli](https://www.npmjs.com/package/@bili-agent-kit/cli)   | 在终端或脚本中调用，管理登录和操作确认    |
 | [@bili-agent-kit/mcp](https://www.npmjs.com/package/@bili-agent-kit/mcp)   | 接入支持 stdio MCP 的 AI 助手             |
-
-CLI 和 MCP 默认共用 `~/.bili-agent-kit/` 下自动创建的配置和登录状态。未登录时可读取公开内容，写操作默认关闭。已有或自定义配置仍可通过 `--config <file>` 指定，见[使用说明](docs/usage.md#配置)。
 
 ### 命令行
 
@@ -59,20 +53,14 @@ npx --yes @bili-agent-kit/cli@latest help
 npx --yes @bili-agent-kit/cli@latest video '{"bvid":"BV1xx411c7mD"}'
 ```
 
-CLI 返回 JSON，方便在脚本中使用。
-
 ### 扫码登录
-
-需要读取账号内容或执行互动时，先在终端登录：
 
 ```sh
 npx --yes @bili-agent-kit/cli@latest auth.login
 npx --yes @bili-agent-kit/cli@latest auth.status
 ```
 
-用哔哩哔哩 App 扫码并确认，登录信息会保存到 `~/.bili-agent-kit/credentials.json`，MCP 可直接复用。已经登录且有效时会返回当前账号。
-
-保存二维码图片、刷新 Cookie 和退出登录的方法见 [登录说明](docs/usage.md#扫码登录与刷新)。
+用哔哩哔哩 App 扫码并在手机上确认。
 
 ### 接入 MCP
 
@@ -89,7 +77,7 @@ npx --yes @bili-agent-kit/cli@latest auth.status
 }
 ```
 
-需要登录时，直接让助手调用 `bili_auth_login` 展示二维码，用 B 站 App 扫码确认。`bili_auth_status` 查看结果，`bili_auth_cancel` 取消本次扫码，无需先去终端登录。
+接入后，对助手说“登录 B 站”，用哔哩哔哩 App 扫码确认即可。
 
 ### 使用 SDK
 
@@ -99,17 +87,15 @@ npx --yes @bili-agent-kit/cli@latest auth.status
 npm install @bili-agent-kit/core
 ```
 
-使用 ESM 导入，读取公开视频信息：
+读取视频信息：
 
 ```ts
-import { BiliKit, FileStore } from "@bili-agent-kit/core";
+import { loadKit } from "@bili-agent-kit/core";
 
-const kit = new BiliKit({ store: new FileStore("./.bili-agent-kit") });
+const kit = await loadKit();
 const video = await kit.reads.video({ bvid: "BV1xx411c7mD" });
 console.log(video.title);
 ```
-
-如需共用 CLI/MCP 的配置和登录状态，从同一包导入 `loadKit`，调用 `await loadKit()`。完整 API 见 [使用说明](docs/usage.md)。
 
 ## 许可
 
