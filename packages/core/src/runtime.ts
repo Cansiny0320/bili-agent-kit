@@ -7,13 +7,32 @@ import { FileAuth } from "./auth-runtime.js";
 import { QrLogin } from "./auth.js";
 import { KitError } from "./errors.js";
 import { FileStore } from "./state.js";
+import { openCredentialSchema } from "./open-platform.js";
+import { mediaConfig } from "./media.js";
 import { BiliKit } from "./kit.js";
 
 export const configSchema = z.strictObject({
   version: z.literal(1),
   stateDir: z.string().min(1),
   credentialsFile: z.string().min(1).optional(),
-  policy: policySchema.default({ writesEnabled: false, allowedTargets: [], trustedDmTargets: [] }),
+  policy: policySchema.default({
+    writesEnabled: false,
+    allowedActions: [],
+    allowedTargets: [],
+    trustedDmTargets: [],
+  }),
+  media: mediaConfig.optional(),
+  openPlatform: z
+    .strictObject({
+      credentialsFile: z.string().min(1),
+      maxUploadBytes: z
+        .number()
+        .int()
+        .positive()
+        .max(512 * 1024 * 1024)
+        .default(128 * 1024 * 1024),
+    })
+    .optional(),
   frames: z
     .strictObject({
       mediaRoot: z.string().min(1),
@@ -41,6 +60,27 @@ export async function loadKit(configPath: string): Promise<BiliKit> {
       config.credentialsFile
         ? new FileCredentials(resolve(base, config.credentialsFile)).read()
         : undefined,
+    ...(config.openPlatform
+      ? {
+          openPlatform: {
+            credentials: async () =>
+              parse(
+                openCredentialSchema,
+                await readJson(resolve(base, config.openPlatform!.credentialsFile)),
+              ),
+            maxUploadBytes: config.openPlatform.maxUploadBytes,
+          },
+        }
+      : {}),
+    ...(config.media
+      ? {
+          media: {
+            ...config.media,
+            mediaRoot: resolve(base, config.media.mediaRoot),
+            outputRoot: resolve(base, config.media.outputRoot),
+          },
+        }
+      : {}),
     ...(config.frames
       ? {
           frames: {

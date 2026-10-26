@@ -12,3 +12,6 @@ config.local.json
 state.json*
 /packages/*/LICENSE
 /packages/*/NOTICE.md
+open-credentials*.json
+open-credentials*.json.*
+/artifacts/

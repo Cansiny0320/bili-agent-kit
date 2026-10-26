@@ -7,18 +7,51 @@ import {
   type WriteAction,
   type WriteActionInput,
 } from "./contracts.js";
-import { BiliClient, API, LIVE, VC, type Session } from "./client.js";
+import { BiliClient, API, LIVE, VC, scrub, type Session } from "./client.js";
 import { KitError } from "./errors.js";
 import { object } from "./traffic.js";
 import { digest } from "./wbi.js";
 import type { StateStore } from "./state.js";
+import { isOpenAction, type OpenPlatform } from "./open-platform.js";
+import { legacyActionKinds } from "./actions.js";
+import {
+  bindAttachments,
+  executeExtended,
+  extendedPreflight,
+  isExtended,
+  type Step,
+} from "./write-actions.js";
 
 export class Writes {
   #client: BiliClient;
   #store: StateStore;
-  constructor(client: BiliClient, store: StateStore) {
+  constructor(
+    client: BiliClient,
+    store: StateStore,
+    private readonly mediaRoot?: string,
+    private readonly openPlatform?: OpenPlatform,
+  ) {
     this.#client = client;
     this.#store = store;
+  }
+  async #session(action: WriteAction): Promise<Session> {
+    if (isOpenAction(action)) {
+      if (!this.openPlatform)
+        throw new KitError("AUTH_REQUIRED", "Open platform is not configured.");
+      const session = await this.openPlatform.session(this.openPlatform.scope(action));
+      if (session.authorization.uid !== action.uid)
+        throw new KitError("FORBIDDEN", "Open platform target account does not match.");
+      return session;
+    }
+    return this.#client.session(true);
+  }
+  async #bind(action: WriteAction): Promise<WriteAction> {
+    if (isOpenAction(action)) {
+      if (!this.openPlatform)
+        throw new KitError("AUTH_REQUIRED", "Open platform is not configured.");
+      return this.openPlatform.bind(action);
+    }
+    return bindAttachments(action, this.mediaRoot);
   }
   preview(input: WriteActionInput): {
     action: WriteAction;
@@ -34,16 +67,19 @@ export class Writes {
       throw new KitError("FORBIDDEN", "External writes require durable state.");
     if (!p.writesEnabled || !p.allowedTargets.includes(targetOf(action)))
       throw new KitError("FORBIDDEN", "Writing is disabled or the target is not allowed.");
+    if (!legacyActionKinds.includes(action.kind) && !p.allowedActions.includes(action.kind))
+      throw new KitError("FORBIDDEN", "This write action must be explicitly enabled.");
     if (action.kind === "dm.send") this.#client.requireTrustedDm(action.uid);
   }
   async prepare(input: WriteActionInput, key: string): Promise<Draft> {
-    const action = parse(actionSchema, input);
+    let action = parse(actionSchema, input);
     parse(z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/), key);
     this.checkPolicy(action);
-    const session = await this.#client.session(true);
+    action = await this.#bind(action);
+    const session = await this.#session(action);
     const hash = digest(JSON.stringify({ account: session.fingerprint, action }));
     const draftId = digest(`${session.fingerprint}:${key}`);
-    return this.#store.transaction((state) => {
+    const draft = await this.#store.transaction((state) => {
       const old = state.drafts[draftId];
       if (old) {
         if (old.digest !== hash)
@@ -65,21 +101,27 @@ export class Writes {
         createdAt: now,
         expiresAt: now + 3600000,
         status: "draft",
+        steps: {},
       };
       state.drafts[draftId] = draft;
       return draft;
     });
+    return publicDraft(draft);
   }
-  async inspect(draftId: string): Promise<Draft> {
+  async #inspect(draftId: string): Promise<Draft> {
     parse(z.string().regex(/^[a-f0-9]{64}$/), draftId);
     const draft = (await this.#store.snapshot()).drafts[draftId];
     if (!draft) throw new KitError("NOT_FOUND", "Draft not found.");
-    const s = await this.#client.session(true);
+    const s = await this.#session(draft.action);
     if (draft.account !== s.fingerprint)
       throw new KitError("FORBIDDEN", "Draft belongs to a different account.");
     return draft;
   }
+  async inspect(draftId: string): Promise<Draft> {
+    return publicDraft(await this.#inspect(draftId));
+  }
   async #preflight(action: WriteAction, s: Session): Promise<Record<string, string>> {
+    if (isOpenAction(action)) return {};
     const nav = object(await this.#client.get("/x/web-interface/nav", {}, false, API, s));
     if (
       nav.isLogin !== true ||
@@ -93,6 +135,7 @@ export class Writes {
       throw new KitError("AUTH_REQUIRED", "Verified account changed; sign in again.");
     const csrf = s.credentials?.bili_jct;
     if (!csrf) throw new KitError("AUTH_REQUIRED", "CSRF credential missing.");
+    if (isExtended(action)) return {};
     if (action.kind === "dm.send") {
       const relation = object(
         await this.#client.get("/x/relation", { fid: action.uid }, false, API, s),
@@ -152,14 +195,18 @@ export class Writes {
     };
   }
   async execute(draftId: string): Promise<Draft> {
-    const draft = await this.inspect(draftId);
+    const draft = await this.#inspect(draftId);
     this.checkPolicy(draft.action);
-    if (draft.status === "sent") return draft;
+    if (draft.status === "sent") return publicDraft(draft);
     this.#assertApproved(draft);
-    const s = await this.#client.session(true);
+    const s = await this.#session(draft.action);
     if (s.fingerprint !== draft.account)
       throw new KitError("FORBIDDEN", "Account changed; prepare a new draft.");
+    await this.#bind(draft.action);
     const fields = await this.#preflight(draft.action, s);
+    const pics = isExtended(draft.action)
+      ? await extendedPreflight(this.#client, draft.action, s)
+      : [];
     await this.#store.transaction((state) => {
       const current = state.drafts[draftId];
       if (!current) throw new KitError("NOT_FOUND", "Draft not found.");
@@ -167,26 +214,72 @@ export class Writes {
       current.status = "sending";
     });
     const kind = draft.action.kind;
-    try {
-      const result = await this.#client.post(
-        kind === "dm.send"
-          ? "/web_im/v1/web_im/send_msg"
-          : kind === "live.send"
-            ? "/msg/send"
-            : kind === "comment.delete"
-              ? "/x/v2/reply/del"
-              : "/x/v2/reply/add",
-        fields,
-        kind === "dm.send" ? VC : kind === "live.send" ? LIVE : API,
-        s,
-      );
-      return await this.#store.transaction((state) => {
+    const step: Step = async (name, run) => {
+      const old = await this.#store.transaction((state) => {
         const current = state.drafts[draftId];
         if (!current) throw new KitError("STATE_INVALID", "Reserved draft missing.");
-        current.status = "sent";
-        current.result = result;
-        return current;
+        const previous = current.steps[name];
+        if (previous?.status === "pending")
+          throw new KitError("UNKNOWN_OUTCOME", "Step outcome requires reconciliation.");
+        if (previous?.status === "done") return previous;
+        current.steps[name] = { status: "pending" };
+        return undefined;
       });
+      if (old) return old.result;
+      try {
+        const result = await run();
+        await this.#store.transaction((state) => {
+          state.drafts[draftId]!.steps[name] = { status: "done", result };
+        });
+        return result;
+      } catch (error) {
+        if (
+          error instanceof KitError &&
+          ["RATE_LIMITED", "TRAFFIC_PAUSED", "UPSTREAM"].includes(error.code)
+        )
+          await this.#store.transaction((state) => {
+            state.drafts[draftId]!.steps[name] = { status: "failed" };
+          });
+        throw error;
+      }
+    };
+    try {
+      const result = isOpenAction(draft.action)
+        ? await this.openPlatform!.execute(draft.action, s, draftId, step)
+        : isExtended(draft.action)
+          ? await executeExtended(
+              this.#client,
+              draft.action,
+              s,
+              draftId,
+              step,
+              pics,
+              this.mediaRoot,
+            )
+          : await step("send", () =>
+              this.#client.post(
+                kind === "dm.send"
+                  ? "/web_im/v1/web_im/send_msg"
+                  : kind === "live.send"
+                    ? "/msg/send"
+                    : kind === "comment.delete"
+                      ? "/x/v2/reply/del"
+                      : "/x/v2/reply/add",
+                fields,
+                kind === "dm.send" ? VC : kind === "live.send" ? LIVE : API,
+                s,
+                draftId,
+              ),
+            );
+      return publicDraft(
+        await this.#store.transaction((state) => {
+          const current = state.drafts[draftId];
+          if (!current) throw new KitError("STATE_INVALID", "Reserved draft missing.");
+          current.status = "sent";
+          current.result = result;
+          return current;
+        }),
+      );
     } catch (error) {
       const definite =
         error instanceof KitError &&
@@ -230,7 +323,7 @@ export class Administrator {
     parse(z.string().trim().min(1).max(100), by);
     const draft = await this.#writes.inspect(draftId);
     this.#writes.checkPolicy(draft.action);
-    return this.#store.transaction((state) => {
+    const approved = await this.#store.transaction((state) => {
       const current = state.drafts[draftId];
       if (!current) throw new KitError("NOT_FOUND", "Draft not found.");
       if (
@@ -240,7 +333,7 @@ export class Administrator {
       )
         throw new KitError("CONFLICT", "Review digest does not match immutable content.");
       if (
-        !["draft", "approved"].includes(current.status) ||
+        !["draft", "approved", "rejected"].includes(current.status) ||
         current.expiresAt <= this.#client.traffic.clock.now()
       )
         throw new KitError("CONFLICT", "Draft cannot be approved in its current state.");
@@ -248,19 +341,25 @@ export class Administrator {
       current.approval = { digest: expectedDigest, by, at: this.#client.traffic.clock.now() };
       return current;
     });
+    return publicDraft(approved);
   }
   async reconcile(draftId: string, outcome: "sent" | "not-sent"): Promise<Draft> {
     parse(z.enum(["sent", "not-sent"]), outcome);
     await this.#writes.inspect(draftId);
-    return this.#store.transaction((state) => {
+    const reconciled = await this.#store.transaction((state) => {
       const draft = state.drafts[draftId];
       if (!draft || !["unknown", "sending"].includes(draft.status))
         throw new KitError("CONFLICT", "Only uncertain sends can be reconciled.");
       draft.status = outcome === "sent" ? "sent" : "draft";
       delete draft.approval;
-      if (outcome === "not-sent") draft.expiresAt = this.#client.traffic.clock.now() + 3600000;
+      if (outcome === "not-sent") {
+        draft.expiresAt = this.#client.traffic.clock.now() + 3600000;
+        for (const [name, step] of Object.entries(draft.steps))
+          if (step.status === "pending") delete draft.steps[name];
+      }
       return draft;
     });
+    return publicDraft(reconciled);
   }
   async resumeAccount(): Promise<{ resumed: true }> {
     const s = await this.#client.session(true);
@@ -269,4 +368,18 @@ export class Administrator {
     });
     return { resumed: true };
   }
+}
+
+function publicDraft(draft: Draft): Draft {
+  const secrets: Record<string, string> = {};
+  for (const [name, step] of Object.entries(draft.steps)) {
+    if (
+      step.result &&
+      typeof step.result === "object" &&
+      "upload_token" in step.result &&
+      typeof step.result.upload_token === "string"
+    )
+      secrets[name] = step.result.upload_token;
+  }
+  return scrub(draft, secrets) as Draft;
 }

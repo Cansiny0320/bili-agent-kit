@@ -143,6 +143,9 @@ export class QrLogin {
       sessdata: cookies.SESSDATA,
       bili_jct: cookies.bili_jct,
       ...(cookies.buvid3 ? { buvid3: cookies.buvid3 } : {}),
+      ...(typeof object(data).refresh_token === "string" && object(data).refresh_token
+        ? { refresh_token: object(data).refresh_token }
+        : {}),
     });
     if (!parsed.success)
       throw new KitError("AUTH_REQUIRED", "Login response did not provide valid credentials.");

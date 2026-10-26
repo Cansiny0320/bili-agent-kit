@@ -1,8 +1,10 @@
-# 使用说明 / Usage reference
+# 使用说明
 
-## Configuration
+本页对应 `0.2.0`。CLI、MCP 和 SDK 共用 core 的操作定义。`help` / `list` 返回完整输入 schema，MCP 工具名为 CLI 名称加 `bili_` 前缀。所有 ID 使用字符串，页码和数量使用数字。
 
-Both entrypoints require `--config <file>`; no default home directory is read or written. Paths in the JSON file are relative to that file, except `ffmpegPath`, which is an executable name or an absolute path.
+## 配置
+
+CLI 和 MCP 必须传入 `--config <file>`。路径相对配置文件目录；`ffmpegPath` 可以是可执行文件名或绝对路径。不扫描浏览器或默认用户目录。
 
 ```json
 {
@@ -11,161 +13,259 @@ Both entrypoints require `--config <file>`; no default home directory is read or
   "credentialsFile": "./credentials.local.json",
   "policy": {
     "writesEnabled": false,
+    "allowedActions": [],
     "allowedTargets": [],
-    "trustedDmTargets": ["222"]
+    "trustedDmTargets": []
   }
 }
 ```
 
-Omit `credentialsFile` for anonymous public reads. A configured but nonexistent file also allows anonymous reads. Authenticated subtitle/DM reads require a separately supplied JSON file with `sessdata`, `bili_jct`, and optional `buvid3`. These are the account's Cookie components, not a complete Cookie header. Create it through QR login or provision it in a private directory; never put values in CLI arguments, MCP tool calls, source control or logs. Unknown JSON properties are rejected. The SDK can inject a credential provider instead of using a file.
+省略 `credentialsFile` 或文件不存在时，可匿名读取公开内容。文件包含 `sessdata`、`bili_jct`，以及可选 `buvid3`、`refresh_token`；通过扫码登录创建，不要把值放在命令参数、日志或版本控制中。SDK 也可提供 `credentials` 回调。未知配置字段会被拒绝。
 
-To enable writes, the administrator sets `writesEnabled: true` and exact targets: `comment:<aid>`, `dm:<uid>`, or `live:<canonical room ID>`. DM access also requires the UID in `trustedDmTargets`. Comments currently support video replies (`type: 1`). Use the numeric `aid`/`cid` and canonical `room_id` returned by the read tools. Config is loaded at process startup: restart a long-running MCP process after policy changes. Stop the old process before revoking permissions; editing a file alone does not revoke an in-flight request.
+策略在启动时加载；修改后重启服务。配置变更不会中断已经发出的请求。新写操作必须同时配置 `writesEnabled`、`allowedActions` 和目标白名单；旧评论、私信和直播发送保持原有合同。
 
-## QR authentication (trusted host only)
+## 扫码登录与刷新
+
+在可信管理员终端运行：
 
 ```sh
 node packages/cli/dist/main.mjs --config config.local.json auth.login '{}'
-node packages/cli/dist/main.mjs --config config.local.json auth.login '{"png":"login-qr.png"}'
 node packages/cli/dist/main.mjs --config config.local.json auth.status '{}'
-node packages/cli/dist/main.mjs --config config.local.json auth.logout '{}'
+node packages/cli/dist/main.mjs --config config.local.json auth.refresh-check '{}'
+node packages/cli/dist/main.mjs --config config.local.json auth.refresh '{}'
 ```
 
-The first two lines are alternative login commands. `credentialsFile` must be explicitly configured. QR/progress goes to stderr; stdout contains one JSON envelope with `authenticated` and, on success, `account: {uid, name}`. Status performs live verification; network failures are errors, not a claim that the account is logged out. PNG paths are relative to the current working directory; parent directories must exist and files are never overwritten. The terminal QR is always displayed. No browser or local web server is opened.
+仍然使用哔哩哔哩 App 扫码并确认。二维码和进度输出到 stderr，stdout 只包含 JSON。登录参数 `{"png":"login-qr.png"}` 可额外保存图片，文件不能已存在。扫码最多等待 3 分钟，每次轮询至少间隔 2 秒，Ctrl+C 取消。登录失败保留旧凭据。
 
-Scan and confirm in the Bilibili app. Polling is spaced at least 2 seconds, each request times out after 15 seconds, and the local QR window is 3 minutes (the platform can expire it earlier). Ctrl+C returns `CANCELLED` / exit code 130. Missing cookies, failed verification, timeout, cancellation and storage failures before replacement preserve the previous credential file. Credentials are plaintext: POSIX 0600; Windows disables inherited permissions on the new file and grants only the current user's SID. State directories still require administrator-managed permissions. No refresh token is retained and no automatic session renewal is performed.
+QR 响应中的 `refresh_token` 会一并保存。`auth.refresh-check` 检查是否需要刷新；`auth.refresh` 按平台结果刷新 Cookie，没有后台自动刷新。旧凭据没有 refresh token 时，重新扫码即可补齐。新凭据必须验证为相同 UID 才能替换；替换后再确认旧 token 失效。中断恢复使用凭据旁的 `.refresh.json` 私有日志：已有新凭据时继续验证/确认；刷新请求结果不明时停止，不自动再次轮换，可重新扫码恢复。日志属于敏感文件。
 
-Logout only deletes local credentials; it does not revoke the Bilibili session, remove budgets/cursors/drafts, or sign out other devices. Credentials are read again on each operation; in-flight requests can still finish with their captured session. A `.lock` next to the credential file serializes login/logout; after a crash, verify the process has stopped before removing only that lock.
+`auth.logout '{}'` 仅删除本地凭据和刷新日志，保留状态，不撤销其他设备会话。登录/刷新不会开启写权限、清除预算或解除暂停。运行中的 MCP 在后续操作中重新读凭据；进行中的请求使用已捕获的会话。
 
-For SDK applications with custom UI/storage:
+文件为本地明文，写入使用 POSIX 0600 或仅当前用户可访问的 Windows ACL。凭据旁的 `.lock` 串行化登录、退出和刷新；异常遗留锁必须确认进程已退出后再处理。
+
+SDK 可使用 `loadAuth(configPath)` 的 `login`、`status`、`refreshCheck`、`refresh`、`logout`。`QrLogin.generate/poll/verify` 支持自定义 UI，低层 `poll` 成功结果含凭据，只能交给可信宿主。CLI 和 `FileAuth` 返回脱敏账号信息。MCP 不提供登录、刷新、审批或恢复管理工具。
+
+## 内容读取
+
+下列操作直接对应 `kit.reads.<名称>(input)`；旧 SDK 方法 `dmHistory`、`liveInfo`、`liveHistory` 保持 camelCase。
+
+| 用途                 | 操作                                            | 主要输入                                                       |
+| -------------------- | ----------------------------------------------- | -------------------------------------------------------------- |
+| 视频、普通搜索、字幕 | `video`、`search`、`subtitles`                  | `{bvid}`、`{keyword,page?}`、`{bvid,cid,language?}`            |
+| 发现内容             | `popular`、`ranking`、`hot_search`              | `{page?,size?}`、`{rid?}`、`{}`                                |
+| 分类搜索             | `search_advanced`                               | `{keyword,type?,order?,duration?,page?}`                       |
+| 用户和投稿           | `user`、`user_videos`                           | `{uid}`、`{uid,page?,size?,order?}`                            |
+| 社交关系             | `followings`、`followers`                       | `{uid,page?,size?}`                                            |
+| 收藏                 | `favorite_folders`、`favorite_items`            | `{uid}`、`{folderId,page?,size?,keyword?}`                     |
+| 个人观看记录         | `history`、`watch_later`                        | `{max?,viewAt?,business?}`、`{}`                               |
+| 推荐、标签           | `related`、`tags`                               | `{bvid}`                                                       |
+| 动态                 | `dynamic_feed`、`user_dynamics`、`dynamic`      | `{offset?,type?}`、`{uid,offset?}`、`{dynamicId}`              |
+| 专栏                 | `articles`、`article`                           | `{uid,page?,size?}`、`{cvid}`                                  |
+| 消息通知             | `notifications`                                 | `{kind,cursorId?,cursorTime?}`；kind 为 `reply/at/like/unread` |
+| 评论                 | `comments`、`comment_replies`、`comment_pinned` | `{oid,page?,sort?}`、`{oid,root,page?,size?}`、`{oid}`         |
+| 检查评论             | `comment_check`                                 | `{oid,rpid,root?,maxPages?}`                                   |
+| 视频引用和分 P       | `resolve`                                       | `{reference,page?}`                                            |
+| 字幕文本             | `transcript`                                    | `{reference,page?,language?,format?}`                          |
+| 视频弹幕             | `video_danmaku`                                 | `{reference,page?,segment?}`                                   |
+| B 站 AI 总结         | `video_summary`                                 | `{reference,page?}`                                            |
+| 直播                 | `live_resolve`、`live_info`、`live_history`     | `{roomId}`                                                     |
+| 私信历史             | `dm_history`                                    | `{uid,beforeSeq?}`                                             |
+| 创作指标             | `creator_metrics`                               | `{bvid?}`                                                      |
+
+`reference` 支持 BV、AV、数字 aid、完整视频 URL 和 `b23.tv` 短链。URL 中的 `p` 与显式 `page` 冲突会报错。解析后使用对应分 P 的 aid/bvid/cid；字幕核对返回身份，未匹配的字幕返回 `selected: null`。字幕格式支持 `json/text/srt/vtt`，不生成语音转写。`video_danmaku` 每次取一个约 6 分钟分段，输出时间戳和文本；`video_summary` 返回平台已有总结与时间提纲，不保证所有视频都有结果。
+
+列表保留平台分页字段；调用方根据 `page`、`cursor`、`offset`、`has_more` 等继续读取，每次请求有界。`comment_check` 返回 `found/not_found/incomplete`，有限页内没找到不能证明评论已删除。创作指标来自当前账号最近最多 100 个稿件，返回覆盖范围；比率转换为百分比并保留原值，不是全部历史统计。
+
+私信读取要求目标在 `trustedDmTargets`。返回正文和标记均为外部不可信数据；不要作为 Agent 指令或可执行 HTML。读取接口受内容可见性和账号权限限制，失败会返回错误，不把失败伪装成空列表。新增接口多数保留上游 JSON，SDK 返回 `unknown`，调用方需按实际字段校验后使用。
 
 ```ts
-import { QrLogin } from "@bili-agent-kit/core";
+import { loadKit } from "@bili-agent-kit/core";
 
-const login = new QrLogin();
-const qr = await login.generate();
-// Render qr.url in your trusted UI. Keep qr.key out of logs.
-const result = await login.poll(qr); // call again while waiting/scanned
-if (result.status === "success") {
-  // Save result.credentials in your private store; result.account is verified.
-  // Never return this raw result to an agent or log it.
+const kit = await loadKit("./config.local.json");
+const popular = await kit.reads.popular({ page: 1, size: 20 });
+const transcript = await kit.reads.transcript({
+  reference: "BV1xx411c7mD",
+  page: 2,
+  format: "srt",
+});
+```
+
+## 增量消息
+
+`dm_poll {uid}` / `dm_ack {uid,receipt}` 对应 `kit.dm.peek/ack`。`events_poll` / `events_ack` 对应 `kit.events.peek/ack`，输入如下：
+
+```json
+{"source":"reply"}
+{"source":"at"}
+{"source":"like"}
+{"source":"comments","oid":"42"}
+{"source":"comments","oid":"42","root":"11"}
+{"source":"live","roomId":"99"}
+```
+
+ack 输入在同一 source 参数上增加 `receipt`。首次调用建立基线，不回放历史；后续按账号和来源持久化去重，返回待处理事件，直到调用方完成持久处理并 ack。同一 receipt 可能重复投递，消费方也应去重。分页异常或积压超过 10 页时保留进度并报错。
+
+直播仅提供近期快照，返回 `coverage: "recent_snapshot_only"`，不能承诺完整弹幕流。评论和通知也受平台返回范围限制。库不运行后台定时器，由宿主安排轮询。
+
+## 受控写操作
+
+所有操作通过 `write_preview`、`write_prepare`、`write_inspect`、`write_execute`，分别对应 `kit.writes.preview/prepare/inspect/execute`。新增动作默认关闭。
+
+| action.kind                              | 主要字段                                         | allowedTargets                           |
+| ---------------------------------------- | ------------------------------------------------ | ---------------------------------------- |
+| `comment.add` / `comment.delete`         | `oid,text,root?,parent?` / `oid,rpid`            | `comment:<aid>`                          |
+| `dm.send`                                | `uid,text`                                       | `dm:<uid>`，还需 trustedDmTargets 和互关 |
+| `live.send`                              | `roomId,text`                                    | `live:<canonical room ID>`               |
+| `video.like`                             | `aid,enabled?`                                   | `video:<aid>`                            |
+| `video.coin`                             | `aid,count?,like?`；count 为 1 或 2              | `video:<aid>`                            |
+| `video.triple`                           | `aid`                                            | `video:<aid>`                            |
+| `favorite.add` / `favorite.remove`       | `aid,folderId`                                   | `favorite:<folderId>`                    |
+| `user.follow` / `user.unfollow`          | `uid`                                            | `user:<uid>`                             |
+| `comment.like`                           | `oid,rpid,enabled?`                              | `comment:<aid>`                          |
+| `video.danmaku`                          | `aid,cid,progressMs,text,color?,mode?,fontSize?` | `video:<aid>`                            |
+| `dynamic.create`                         | `uid,text,images?`                               | `account:<uid>`                          |
+| `dynamic.edit` / `dynamic.delete`        | `dynamicId,text,images?` / `dynamicId`           | `dynamic:<id>`                           |
+| `open.video.publish/edit/delete`         | 见开放平台说明                                   | `open:<uid>`                             |
+| `open.article.publish/edit/delete/image` | 见开放平台说明                                   | `open:<uid>`                             |
+
+收藏会验证文件夹属于当前账号，动态编辑/删除会验证作者。`dynamic.edit` 省略 `images` 保留原图，显式 `[]` 清除原图。图片参数为 `[{"file":"/absolute/media/image.png"}]`，必须位于配置的 `mediaRoot`，最多 9 张 PNG/JPEG。准备草稿时写入 SHA256，执行前复核，批准后替换文件会被拒绝。
+
+例如启用视频点赞，需要 `writesEnabled: true`、`allowedActions: ["video.like"]` 和 `allowedTargets: ["video:42"]`。`enabled: false` 表示取消点赞。
+
+1. `write_preview {action}` 只校验输入并展示目标，不联网、不保存。
+2. `write_prepare {action,key}` 保存规范化内容、附件摘要、账号会话、digest 和一小时有效期；可能读取账号或本地附件，不发送内容。
+3. 管理员检查 `write_inspect {draftId}`，使用准确的 digest 批准：
+
+```sh
+node packages/cli/dist/main.mjs --config config.local.json admin.approve '{"draftId":"<id>","digest":"<digest>","by":"operator"}'
+```
+
+4. `write_execute {draftId}` 检查策略、会话、附件和批准后执行。同一成功草稿再次执行返回已记录结果，同一个 key 不能换内容。
+
+多步上传逐步保存结果。明确被平台拒绝的草稿可在有效期内重新批准，复用已完成上传；请求结果不明则停止，必须先人工核查再 `admin.reconcile`，不能换 key 盲目重发。`sent` 代表平台受理，不代表审核通过。恢复方法见 [SECURITY.md](../SECURITY.md)。
+
+SDK 管理方法为 `kit.admin.approve(id,digest,by)`、`reconcile(id,outcome)`、`resumeAccount()`。`by` 只是审计标签。MCP 不提供这些方法，但模型若能运行管理员 CLI 或修改状态文件，仍能绕过权限边界。
+
+## 媒体与导出
+
+需要媒体能力时添加以下配置片段：
+
+```json
+{
+  "media": {
+    "mediaRoot": "./media",
+    "outputRoot": "./media/output",
+    "ffmpegPath": "ffmpeg",
+    "maxBytes": 134217728,
+    "timeoutMs": 120000
+  }
 }
 ```
 
-`generate`, `poll`, and `verify` accept an optional AbortSignal; `QrLogin` also accepts injected fetch/clock. To reuse local persistence and the complete polling loop, use `const auth = await loadAuth(configPath); await auth.login({onQr: async qr => { /* render qr.url */ }});`. Its result is sanitized, as are `auth.status()` and `auth.logout()`; low-level `QrLogin.poll()` deliberately returns credentials to the trusted host on success. `FileCredentials` is available for explicit local storage. These APIs are not MCP tools.
+`mediaRoot` 限制本地输入，`outputRoot` 保存每次任务的独立结果。将输出放在输入目录之内可继续裁剪下载文件。ffmpeg 需由宿主安装；只有涉及解码/合并的操作实际调用它。每次下载默认最多 128 MiB，允许配置至 512 MiB；多轨合计计算。ffmpeg 默认最多运行 120 秒，可配置至 300 秒。
 
-The endpoints and status codes were checked against Bilibili's [first-party login script](https://s1.hdslb.com/bfs/static/2233-monorepo/passport/static/js/async/630.15570f6b.js). This is a website session flow, not OAuth. A user-authorized real QR login and a separate verification of the saved session succeeded on 2026-10-25; automated tests use fixture responses. This does not verify other real-account read/write operations.
+| 操作              | 输入                                                      | 结果                                               |
+| ----------------- | --------------------------------------------------------- | -------------------------------------------------- |
+| `media_download`  | `{reference,page?,kind?,quality?}`                        | 下载视频或音频，返回本地文件                       |
+| `audio_clip`      | `{file,startSeconds?,durationSeconds?}`                   | 输出 AAC 音频片段                                  |
+| `online_frames`   | `{reference,page?,count?,intervalSeconds?,contactSheet?}` | 下载后抽帧，可合成拼图                             |
+| `subtitle_export` | `{reference,page?,language?,format?}`                     | JSON、TXT、SRT 或 VTT 文件                         |
+| `article_export`  | `{cvid}`                                                  | 基础 Markdown 转换，包含来源链接                   |
+| `live_frame`      | `{roomId}`                                                | 平台直播关键帧及获取时间                           |
+| `materials`       | `{reference,page?,comments?,subtitles?,frames?}`          | 元数据、字幕、评论和可选画面，含来源、时间、缺失项 |
+| `frames`          | `{file,count?,intervalSeconds?}`                          | 兼容原有本地抽帧配置                               |
 
-## Identity and state migration
+SDK 使用 `kit.media.call(name,input)`，下载也可直接调用 `kit.media.download(input)`。旧 `frames` 工具仍使用 `frames: {mediaRoot,outputRoot,ffmpegPath}`，或直接调用 `sampleFrames`。默认 6 帧、间隔 10 秒，最多 12 帧；短视频可能更少。MCP 返回原生 image 内容块，文件路径属于服务端机器。
 
-On first use of an unseen session, the SDK verifies `/x/web-interface/nav` and persists its session fingerprint → UID mapping. Budgets, manual pauses and DM cursors then use the UID, so re-login to the same account preserves them. Drafts retain their session fingerprint: a new login requires a new draft and approval. Switching accounts keeps their state separate.
+媒体请求只允许受控 B 站 CDN，Cookie 不发送到 CDN，重定向不自动跟随。支持 DASH 音视频和单段直链；不可用、仅试看或其他格式明确报错。ffmpeg 只处理下载后或根目录内的本地文件，不接收远程 URL。导出和下载会写文件；媒体结果由宿主按需要清理。文章 Markdown 是基础转换，不保证保留全部富文本排版；`materials` 不执行模型总结，未请求画面时无需媒体目录。
 
-Legacy state is migrated only after verifying the exact old session. Known identity mappings survive credential expiry. If the old session has never been mapped and has expired, login cannot attribute its legacy counters/cursors: it stops without replacing credentials. Preserve the files for administrator review; do not delete state to bypass this. Conflicting legacy/current cursors also stop migration. Budget merges conservatively add counters and keep the later window start. Historical drafts are retained and never automatically replayed. Login does not clear an existing manual pause; use `admin.resume` only after reviewing the cause.
+## 官方开放平台
 
-Back up state and credentials privately before upgrading. Older versions do not understand the new identity mapping; to roll back, use the old executable with the pre-upgrade backup, not the migrated state.
-
-## Operations
-
-CLI names below correspond to MCP names prefixed with `bili_`. `help`/`list` returns the full JSON schemas. JSON input uses strings for identifiers; page/count values are numbers.
-
-| Operation       | Input                              | SDK                               |
-| --------------- | ---------------------------------- | --------------------------------- |
-| `video`         | `{bvid}`                           | `kit.reads.video`                 |
-| `search`        | `{keyword, page?}`                 | `kit.reads.search`                |
-| `subtitles`     | `{bvid, cid, language?}`           | `kit.reads.subtitles`             |
-| `comments`      | `{oid, page?, sort?}`; sort 0 or 2 | `kit.reads.comments`              |
-| `dm_history`    | `{uid, beforeSeq?}`                | `kit.reads.dmHistory`             |
-| `live_info`     | `{roomId}`                         | `kit.reads.liveInfo`              |
-| `live_history`  | `{roomId}`                         | `kit.reads.liveHistory`           |
-| `dm_poll`       | `{uid}`                            | `kit.dm.peek`                     |
-| `dm_ack`        | `{uid, receipt}`                   | `kit.dm.ack`                      |
-| `write_preview` | `{action}`                         | `kit.writes.preview(action)`      |
-| `write_prepare` | `{action, key}`                    | `kit.writes.prepare(action, key)` |
-| `write_inspect` | `{draftId}`                        | `kit.writes.inspect(draftId)`     |
-| `write_execute` | `{draftId}`                        | `kit.writes.execute(draftId)`     |
-| `frames`        | `{file, count?, intervalSeconds?}` | `sampleFrames(options, input)`    |
-
-Search returns one page; comments return up to 20 replies per page; DM history returns up to 30 messages. Subtitles return the selected track and timed text, with no temporary CDN authorization URL. A missing track returns `selected: null`; subtitle access and availability depend on the account/video. This toolkit does not generate transcripts with an AI model.
-
-`dm_poll` first establishes a baseline from the newest page and deliberately skips old messages. Later polls paginate backward by sequence number, deduplicate overlapping pages and messages at the same second, and persist a pending delivery queue with the cursor in one transaction. Only messages from the trusted target are delivered. Repeated polls return the same receipt until the host durably processes and acknowledges it. A wrong/out-of-order receipt is rejected. This is at-least-once delivery: consumers should deduplicate receipts. Failures, unsafe numeric identifiers, stalled pagination and a backlog beyond 10 pages leave the cursor unchanged. There is no automatic scheduler or exactly-once guarantee for downstream work.
-
-`live_history` is a recent bounded history, not a lossless stream. Comments are explicit pages, not an automatic listener. Returned Bilibili text/markup is untrusted content; do not interpret it as agent instructions or executable HTML.
-
-## Controlled writes
-
-Actions:
+视频稿件和文章稿件使用独立应用授权，扫码 Cookie 不能代替。当前实现读取既有应用凭据，不代办应用注册或 OAuth 授权。配置片段：
 
 ```json
-{"kind":"comment.add","oid":"42","text":"Hello","root":"11","parent":"12"}
-{"kind":"comment.delete","oid":"42","rpid":"12"}
-{"kind":"dm.send","uid":"222","text":"Hello"}
-{"kind":"live.send","roomId":"99","text":"Hello"}
+{
+  "openPlatform": {
+    "credentialsFile": "./open-credentials.local.json",
+    "maxUploadBytes": 134217728
+  }
+}
 ```
 
-`root`/`parent` are optional for a new comment. DMs/comments allow up to 1,000 characters; live chat uses a conservative 30-character bound. Bilibili can impose stricter account-specific constraints. A live write requires the canonical room ID; a short ID is rejected if it resolves to a different ID.
+凭据文件包含 `clientId`、`appSecret`、`accessToken`、`uid`、`scopes`（视频 `ARC_BASE`、文章 `ATC_BASE`），可选 `expiresAt` 是毫秒 Unix 时间戳。单独安全保管，不放入 MCP 参数或日志。token 变化后重新准备和批准草稿。
 
-1. Call `write_preview` with the action. This validates input without persistence or network.
-2. Call `write_prepare` with the same action and a caller-chosen key such as `review-2026-10-25-001`. Preparation is also a local validation step and persists the exact normalized content, account fingerprint, digest and a one-hour expiry. It does not send.
-3. A trusted administrator uses `write_inspect` to review content, target, key and digest. Approve with the exact digest:
+读取操作为 `open_video_list`、`open_video`、`open_video_categories`、`open_article_list`、`open_article`、`open_article_categories`，SDK 调用 `kit.open.call(name,input)`。列表使用 `page/size`；详情分别使用 `resourceId`（BV）和 `articleId`。
 
-```sh
-node packages/cli/dist/main.mjs --config config.local.json admin.approve '{"draftId":"<64-hex-id>","digest":"<64-hex-digest>","by":"operator"}'
+视频发布 action 示例：
+
+```json
+{
+  "kind": "open.video.publish",
+  "uid": "111",
+  "video": { "file": "/absolute/media/video.mp4" },
+  "cover": { "file": "/absolute/media/cover.jpg" },
+  "metadata": { "title": "视频标题", "tid": 21, "tag": "标签", "copyright": 1, "desc": "简介" }
+}
 ```
 
-4. Call `write_execute` with the draft ID. It checks current loaded policy, account, digest and expiry; checks login and mutual follows for DMs; persists a sending reservation; then sends. A confirmed draft returns its recorded result on repeat execution. Reusing the key with different content fails. Draft content cannot be edited; prepare a new key for a revised action.
+上传使用连续编号的 10 MiB 分片，完成后提交稿件。封面可选，PNG/JPEG 最大 5 MiB；本地视频受 `maxUploadBytes` 约束，最大配置为 512 MiB。`open.video.edit` 使用 `uid,resourceId,metadata`，metadata 必须完整提供 `title,tid,cover,desc,no_reprint`；只编辑元数据，不替换视频。删除使用 `uid,resourceId`。
 
-Administrator SDK methods are `kit.admin.approve(id, digest, by)`, `reconcile(id, outcome)` and `resumeAccount()`. They are host capabilities, not authentication mechanisms. `by` is an audit label, not proof of identity. Never map these methods to model tools or allow model-controlled shell access to their CLI equivalents.
+文章发布/编辑 metadata 为完整表单：`title,category,template_id,summary,content,banner_url,original,image_urls,tags,list_id,up_closed_reply,top_video_bvid`。无值字段也须明确传空字符串或 0，避免编辑时意外清空。`banner_url` 和 `top_video_bvid` 不能同时设置；`template_id` 为 3/4/5，`summary` 至少 200 字。发布使用 `uid,metadata`，编辑再加 `articleId`；删除使用 `uid,articleId`。`open.article.image` 使用 `uid,image:{file}` 上传 PNG/JPEG，返回 URL 后可用于文章草稿。
 
-## JSON contract
+协议依据官方 [签名 2.0](https://open.bilibili.com/doc/4/8673959e-f7bb-56e6-6e68-d225f971b81b)、[视频分片](https://open.bilibili.com/doc/4/733a520a-c50f-7bb4-17cb-35338ba20500)、[视频提交](https://open.bilibili.com/doc/4/f7fc57dd-55a1-5cb1-cba4-61fb2994bf0f)、[文章发布](https://open.bilibili.com/doc/4/b14b77b6-8889-8c8b-2e83-17c5a4c550fb)。文章查询按当前文档使用 GET 表单 body，需真实授权应用进一步验证。当前完成协议模拟测试，没有执行真实投稿、编辑或删除；平台受理与最终审核结果分开。
+
+## 状态升级与恢复
+
+state v1 首次写入前备份为 `state.v1.backup.json`，保留原草稿、身份映射、预算和游标后迁移到 v2。旧程序会拒绝 v2。回滚前停止共享该状态的全部进程，备份最新状态；发生新写入后，不能直接覆盖为升级前备份，否则会丢失去重记录并有重复发送风险。
+
+首次使用新会话会验证 `/x/web-interface/nav`，将会话指纹绑定到 UID。相同账号重新登录或刷新保留预算、暂停状态和游标；旧草稿继续绑定原会话。未验证过且已失效的旧会话不能猜测归属，身份或游标冲突会停止迁移，需保留文件供管理员核查。
+
+## JSON 与错误
 
 ```json
 {"version":1,"ok":true,"data":{}}
 {"version":1,"ok":false,"error":{"code":"APPROVAL_REQUIRED","message":"A current administrator approval is required."}}
 ```
 
-CLI exit codes: `0` success, `2` invalid input, `130` cancelled login, `1` other failures. An empty DM poll is a successful result with `event: null`. MCP tool results include both text and structured content; invalid MCP arguments can also be rejected by the protocol layer before the shared envelope. MCP stdout is reserved for JSON-RPC. Direct SDK methods return typed values and throw `KitError`; `invoke`/`envelope` return the versioned contract.
+CLI 使用 `-` 从 stdin 读取 JSON；退出码为成功 `0`、输入错误 `2`、取消登录 `130`、其他失败 `1`。空轮询返回 `event: null`。MCP 返回 text 和 structuredContent，图片另用 image 内容块，stdout 仅用于 JSON-RPC。直接 SDK 方法抛出 `KitError`；`invoke/envelope` 返回上述 envelope。
 
-Error codes include `CANCELLED`, `INVALID_INPUT`, `NOT_FOUND`, `AUTH_REQUIRED`, `FORBIDDEN`, `APPROVAL_REQUIRED`, `CONFLICT`, `UNKNOWN_OUTCOME`, `RATE_LIMITED`, `TRAFFIC_PAUSED`, `NETWORK`, `UPSTREAM`, `STATE_INVALID`, `STATE_BUSY`, and `UNAVAILABLE`. Unknown errors are sanitized. Raw HTTP bodies, Cookie headers and credential-provider errors are not exposed.
-
-## Optional local frames
-
-Install ffmpeg separately, then add administrator-controlled configuration:
-
-```json
-{
-  "frames": {
-    "mediaRoot": "./media",
-    "outputRoot": "./frames",
-    "ffmpegPath": "ffmpeg"
-  }
-}
-```
-
-This is a fragment to merge into the config, not a complete config file. `file` in the operation is an absolute path inside `mediaRoot`. Supported containers: MP4/MOV/MKV/WebM; URLs and playlists are not accepted. Defaults: 6 frames, 10-second intervals; limits: 12 frames, 120-second process timeout, at most 1280×720 while preserving aspect ratio. Output paths refer to files on the server machine. Very short videos can produce fewer frames. Keep ffmpeg current and sandbox media decoding if handling untrusted files. The toolkit does not install ffmpeg and does not bundle its executable.
+错误码包括 `CANCELLED`、`INVALID_INPUT`、`NOT_FOUND`、`AUTH_REQUIRED`、`FORBIDDEN`、`APPROVAL_REQUIRED`、`CONFLICT`、`UNKNOWN_OUTCOME`、`RATE_LIMITED`、`TRAFFIC_PAUSED`、`NETWORK`、`UPSTREAM`、`STATE_INVALID`、`STATE_BUSY`、`UNAVAILABLE`。错误不回显原始响应体、Cookie 或凭据提供器错误。
 
 ## Workspace and packages
 
 `packages/core` owns all behavior and schemas; `packages/cli` and `packages/mcp` adapt them. Build output is ESM (`.mjs`) with TypeScript declarations (`.d.mts`). Vite+ uses its own version number for the bundled Vite API; the targeted pnpm peer rules acknowledge that alias. TypeScript 7.0.2 is stable, while Vite+'s declaration emitter currently warns that its TypeScript 7 integration is experimental; declaration files and package exports are checked by `pnpm smoke`.
 
-All three packages are published on npm at `0.1.0`. See the [README quick start](../README.en.md#quick-start) for npm/npx installation. The `node packages/cli/dist/main.mjs` commands in this reference use a built source checkout; when using the published CLI, replace that prefix with `npx --yes @bili-agent-kit/cli@0.1.0` and keep the remaining arguments unchanged.
+本页示例使用 `pnpm build` 后的本地 CLI；使用 npm 包时，将 `node packages/cli/dist/main.mjs` 替换为 `npx --yes @bili-agent-kit/cli@0.2.0`，其他参数保持不变。
 
 For local package verification, `pnpm --filter @bili-agent-kit/core pack --pack-destination ./artifacts` creates a package archive. When testing unpublished CLI/MCP changes, also supply the core tarball and a package-manager override resolving `@bili-agent-kit/core` to that local archive; otherwise the dependency would resolve from npm. `scripts/smoke.mjs` demonstrates the complete isolated installation. Repository scripts do not publish to npm.
 
-## npm publication
+## 自动发布
 
-The initial version `0.1.0` of all three packages was published on 2026-10-25. For subsequent releases, select an unused version and update package versions and internal dependency references before creating candidates. Publication is a separate explicitly authorized operation. The workspace root is private; only `packages/core`, `packages/cli`, and `packages/mcp` are publishable. Each package pins public access and the npm registry in `publishConfig` and includes its own README, built ESM/declarations, LICENSE and NOTICE.
+与 [bilibili-video-summary-agent 的发布流程](https://github.com/Cansiny0320/bilibili-video-summary-agent/blob/master/.github/workflows/release.yml) 一样，本仓库通过推送 `v*` tag 触发 GitHub Actions，使用 npm Trusted Publishing（OIDC），无需保存长期 `NPM_TOKEN`。
 
-Prerequisites: log in to npm with an account allowed to publish under `@bili-agent-kit`, and verify that the version has not already been published. A registry 404 alone does not establish scope ownership. If using an organization scope, membership must include publish permission. Do not place npm tokens or Bilibili credentials in package files.
+`.github/workflows/release.yml` 先复用现有 CI 完成 Linux、Windows 检查，再校验 tag、根目录和三个包的版本一致，并要求该提交属于 `main`。发布任务在 GitHub 托管 runner 的 `npm` environment 中运行，重新构建并打包，按 core → CLI → MCP 顺序发布，核对 npm 包完整性及内部依赖版本，全部完成后创建 GitHub Release 并附上三个 tarball。
 
-Create candidates after the normal build/check/test/smoke checks using `pnpm pack --pack-destination <absolute-output-directory>` from each package directory. Use pnpm to resolve `workspace:*` into the actual dependency version in the tarball. Publish the verified tarballs rather than passing the source directories to npm.
+首次接入需给每个 npm 包配置 Trusted Publisher：
 
-From the candidate directory, these commands are previews only. Replace `VERSION` with the candidate version; the already-published `0.1.0` cannot be reused:
+- GitHub repository：`Cansiny0320/bili-agent-kit`
+- Workflow filename：`release.yml`
+- Environment：`npm`
+- 允许操作：直接 `npm publish`
+
+GitHub 的 `npm` environment 仅允许 `v*` tag 部署。工作流发布阶段声明 `id-token: write`，不使用长期 npm token；公有仓库发布公有包时，npm 自动生成 provenance。npm 的初次配置可能需要一次安全密钥确认，以后正常 tag 发布由 CI 完成。
+
+后续发版时，同步更新根目录与三个包的 `version`、安装示例和 `CHANGELOG.md`，完成检查并提交，推送相同版本 tag，例如：
 
 ```sh
-npm publish bili-agent-kit-core-VERSION.tgz --dry-run --ignore-scripts --access public --registry=https://registry.npmjs.org
-npm publish bili-agent-kit-cli-VERSION.tgz --dry-run --ignore-scripts --access public --registry=https://registry.npmjs.org
-npm publish bili-agent-kit-mcp-VERSION.tgz --dry-run --ignore-scripts --access public --registry=https://registry.npmjs.org
+node scripts/release.mjs check v0.2.0
+git tag -a v0.2.0 -m 'Release v0.2.0'
+git push origin main v0.2.0
 ```
 
-Dry runs do not publish or prove registry permissions. After explicit publication authorization and npm authentication, publish the same reviewed artifacts without `--dry-run`, **core first**, then CLI and MCP. Stop on failure and query the registry before retrying: published name/version pairs cannot simply be overwritten. Finish by verifying registry versions, SDK installation and the npx CLI/MCP entrypoints. These steps are intentionally not automated by a publish lifecycle script or Git push.
+示例版本仅用于说明，已发布版本不能复用。`scripts/release.mjs check` 是本地校验；`publish` 模式只允许对应 GitHub 仓库的 tag/OIDC 环境运行。
 
-References: [npm publish](https://docs.npmjs.com/cli/v11/commands/npm-publish/) and [public scoped packages](https://docs.npmjs.com/creating-and-publishing-scoped-public-packages/).
+中途失败时，在确认原因后重新运行同一次 Release workflow。脚本只跳过内容摘要完全相同的已发布版本，遇到同版本不同内容会停止；npm 网络错误不会被当作版本不存在。不覆盖 npm 版本，也不自动删除或重建远端 tag。若部分包已发布，应保留原提交和产物，处理失败后继续。
+
+手工应急发布仍需单独授权和登录，使用检查过的 tarball，core 优先；不要直接发布私有根目录或混入 npm 上的旧 core。自动发布执行结果可在 GitHub Actions 和 npm 对应版本中回读。
+
+依据：[npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/)、[npm trust](https://docs.npmjs.com/cli/v11/commands/npm-trust/)。

@@ -11,5 +11,5 @@ export default defineConfig({
   },
   lint: { options: { typeAware: true, typeCheck: true }, ignorePatterns: ["**/dist/**"] },
   fmt: { ignorePatterns: ["**/dist/**", "pnpm-lock.yaml"] },
-  test: { include: ["tests/**/*.test.ts"], testTimeout: 15000 },
+  test: { include: ["tests/**/*.test.{ts,mjs}"], testTimeout: 15000 },
 });

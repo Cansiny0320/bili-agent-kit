@@ -41,7 +41,10 @@ const VC = "https://api.vc.bilibili.com";
 const LIVE = "https://api.live.bilibili.com";
 export { API, VC, LIVE };
 /** Removes credential fields and known secret values, including echoed values. */
-export function scrub(value: unknown, credentials?: Credentials): unknown {
+export function scrub(
+  value: unknown,
+  credentials?: Readonly<Record<string, string | undefined>>,
+): unknown {
   if (typeof value === "string") {
     let out = value;
     for (const secret of Object.values(credentials ?? {}))
@@ -54,7 +57,9 @@ export function scrub(value: unknown, credentials?: Credentials): unknown {
       Object.entries(value)
         .filter(
           ([key]) =>
-            !/^(cookie|authorization|sessdata|bili_jct|csrf|csrf_token|buvid3)$/i.test(key),
+            !/^(cookie|authorization|sessdata|bili_jct|csrf|csrf_token|buvid3|refresh_token|access_token|app_secret|client_secret|upload_token)$/i.test(
+              key,
+            ),
         )
         .map(([key, item]) => [key, scrub(item, credentials)]),
     );
@@ -102,7 +107,7 @@ export class BiliClient {
   ): Promise<unknown> {
     const current = session ?? (await this.session());
     const url = new URL(path, origin);
-    if (![API, VC, LIVE].includes(url.origin))
+    if (![API, VC, LIVE, "https://member.bilibili.com"].includes(url.origin))
       throw new KitError("FORBIDDEN", "API origin not allowed.");
     if (signed) {
       const nav = object(await this.get("/x/web-interface/nav", {}, false, API, current));
@@ -140,6 +145,7 @@ export class BiliClient {
     fields: Record<string, string>,
     origin: string,
     session: Session,
+    writeGroup?: string,
   ): Promise<unknown> {
     const url = new URL(path, origin);
     if (![API, VC, LIVE].includes(url.origin))
@@ -165,8 +171,48 @@ export class BiliClient {
       },
       session.account,
       true,
+      false,
+      writeGroup ? { writeGroup } : undefined,
     );
     return scrub(data, session.credentials);
+  }
+  async postBody(
+    path: string,
+    body: FormData | Record<string, unknown>,
+    session: Session,
+    writeGroup: string,
+    signed = false,
+  ): Promise<unknown> {
+    const url = new URL(path, API);
+    if (url.origin !== API) throw new KitError("FORBIDDEN", "API origin not allowed.");
+    if (signed) {
+      const nav = object(await this.get("/x/web-interface/nav", {}, false, API, session));
+      const images = upstream(z.object({ img_url: z.string(), sub_url: z.string() }), nav.wbi_img);
+      url.search = signWbi(
+        { csrf: session.credentials?.bili_jct ?? "" },
+        images,
+        this.traffic.clock.now(),
+      );
+    }
+    const form = body instanceof FormData;
+    return scrub(
+      await this.traffic.request(
+        url,
+        {
+          method: "POST",
+          headers: {
+            ...this.headers(session),
+            ...(form ? {} : { "content-type": "application/json" }),
+          },
+          body: form ? body : JSON.stringify(body),
+        },
+        session.account,
+        true,
+        false,
+        { writeGroup },
+      ),
+      session.credentials,
+    );
   }
   async video(input: { bvid: string }): Promise<Video> {
     const args = parse(z.strictObject({ bvid }), input);
@@ -236,6 +282,13 @@ export class BiliClient {
     const player = object(
       await this.get("/x/player/wbi/v2", { bvid: args.bvid, cid: args.cid }, true, API, s),
     );
+    if (
+      (player.bvid !== undefined && player.bvid !== args.bvid) ||
+      (player.cid !== undefined &&
+        String(upstream(z.union([id, z.number().int().positive().safe()]), player.cid)) !==
+          args.cid)
+    )
+      throw new KitError("UPSTREAM", "Subtitle identity does not match the requested video part.");
     const sub = player.subtitle == null ? {} : object(player.subtitle);
     const tracks = parse(
       z.array(

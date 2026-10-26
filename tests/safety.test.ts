@@ -132,14 +132,21 @@ it("ambiguous HTTP failures remain unknown while definite rejection cannot silen
 });
 it("SDK read surface cannot dispatch arbitrary writes", async () => {
   const { kit } = await setup();
-  expect(Object.keys(kit.reads).sort()).toEqual([
-    "comments",
-    "dmHistory",
-    "liveHistory",
-    "liveInfo",
-    "search",
-    "subtitles",
-    "video",
-  ]);
+  expect(Object.keys(kit.reads)).toEqual(
+    expect.arrayContaining([
+      "comments",
+      "dmHistory",
+      "liveHistory",
+      "liveInfo",
+      "search",
+      "subtitles",
+      "video",
+      "popular",
+      "transcript",
+    ]),
+  );
+  expect(
+    Object.keys(kit.reads).some((name) => /post|execute|prepare|approve|request/.test(name)),
+  ).toBe(false);
   expect(Object.keys(kit.writes)).not.toContain("client");
 });

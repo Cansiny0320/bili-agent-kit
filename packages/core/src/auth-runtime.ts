@@ -1,3 +1,5 @@
+import { unlink } from "node:fs/promises";
+import { CookieRefresh, refreshCredentials } from "./auth-refresh.js";
 import { QrLogin, checkCancelled, type QrChallenge, type LoginAccount } from "./auth.js";
 import { FileCredentials } from "./credentials.js";
 import { bindIdentity } from "./identity.js";
@@ -72,6 +74,7 @@ export class FileAuth {
       }
     });
     if (!account) throw new KitError("AUTH_REQUIRED", "Login did not complete.");
+    await unlink(`${this.credentials.path}.refresh.json`).catch(() => {});
     return { authenticated: true, account };
   }
   async status(
@@ -90,8 +93,21 @@ export class FileAuth {
     await this.#bind(credentials, account);
     return { authenticated: true, account };
   }
+  async refreshCheck(
+    signal?: AbortSignal,
+  ): Promise<{ refresh: boolean; timestamp: number; refreshable: boolean }> {
+    const credentials = await this.credentials.read();
+    if (!credentials)
+      throw new KitError("AUTH_REQUIRED", "Sign in before checking refresh status.");
+    const result = await new CookieRefresh(this.protocol).check(credentials, signal);
+    return { ...result, refreshable: !!credentials.refresh_token };
+  }
+  async refresh(signal?: AbortSignal): Promise<{ refreshed: boolean; confirmed: boolean }> {
+    return refreshCredentials(this.credentials, this.store, this.protocol, signal);
+  }
   async logout(): Promise<{ authenticated: false }> {
     await this.credentials.update(async () => undefined);
+    await unlink(`${this.credentials.path}.refresh.json`).catch(() => {});
     return { authenticated: false };
   }
 }

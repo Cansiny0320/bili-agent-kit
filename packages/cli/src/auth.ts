@@ -23,7 +23,9 @@ export async function runAuthCli(
     throw new KitError("INVALID_INPUT", "Auth input must be an object.");
   const args = input as Record<string, unknown>;
   if (
-    !["auth.login", "auth.status", "auth.logout"].includes(name) ||
+    !["auth.login", "auth.status", "auth.logout", "auth.refresh-check", "auth.refresh"].includes(
+      name,
+    ) ||
     Object.keys(args).some((k) => name !== "auth.login" || k !== "png") ||
     (args.png !== undefined && (typeof args.png !== "string" || !args.png.length))
   )
@@ -32,6 +34,8 @@ export async function runAuthCli(
       'Use auth.login {"png":"optional-new-file.png"}, auth.status {} or auth.logout {}.',
     );
   const auth = await (options.load ?? loadAuth)(config);
+  if (name === "auth.refresh-check") return auth.refreshCheck(options.signal);
+  if (name === "auth.refresh") return auth.refresh(options.signal);
   if (name === "auth.status") return auth.status(options.signal);
   if (name === "auth.logout") return auth.logout();
   if (typeof args.png === "string") {

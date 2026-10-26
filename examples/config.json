@@ -4,6 +4,7 @@
   "credentialsFile": "./credentials.local.json",
   "policy": {
     "writesEnabled": false,
+    "allowedActions": [],
     "allowedTargets": [],
     "trustedDmTargets": []
   }

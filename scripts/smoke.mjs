@@ -30,7 +30,10 @@ for (const pkg of ["core", "cli", "mcp"])
   pnpm(["pack", "--pack-destination", pack], join(root, "packages", pkg));
 const dependencies = {};
 for (const pkg of ["core", "cli", "mcp"]) {
-  const name = (await readdir(pack)).find((name) => name === `bili-agent-kit-${pkg}-0.1.0.tgz`);
+  const manifest = JSON.parse(await readFile(join(root, "packages", pkg, "package.json"), "utf8"));
+  const name = (await readdir(pack)).find(
+    (name) => name === `bili-agent-kit-${pkg}-${manifest.version}.tgz`,
+  );
   assert.ok(name, `Missing packed ${pkg}`);
   dependencies[`@bili-agent-kit/${pkg}`] = `file:${join(pack, name).replaceAll("\\", "/")}`;
 }
@@ -38,7 +41,7 @@ await writeFile(
   join(work, "package.json"),
   JSON.stringify({ private: true, type: "module", dependencies }),
 );
-// The packages are intentionally unpublished: resolve the CLI/MCP transitive core edge locally too.
+// Resolve local candidate dependencies instead of mixing them with the published core.
 await writeFile(
   join(work, "pnpm-workspace.yaml"),
   `overrides:\n  '@bili-agent-kit/core': ${JSON.stringify(dependencies["@bili-agent-kit/core"])}\n`,
@@ -58,6 +61,10 @@ assert.equal((await runCli(['help'],async()=>'' )).ok,true);
 assert.equal(typeof new QrLogin().generate,'function');
 assert.equal(typeof FileCredentials,'function');
 assert.equal(typeof loadAuth,'function');
+assert.equal(typeof kit.reads.popular,'function');
+assert.equal(typeof kit.media.download,'function');
+assert.equal(typeof kit.events.peek,'function');
+assert.equal(typeof kit.open.call,'function');
 await createMcpServer(kit).close();
 console.log('Packed SDK/CLI/MCP exports passed');
 `,
@@ -73,6 +80,14 @@ const kit=new BiliKit({store:new MemoryStore()});
 const action:WriteActionInput={kind:'comment.add',oid:'42',text:'hello'};
 kit.writes.preview(action);
 const video:Promise<Video>=kit.reads.video({bvid:'BV1xx411c7mD'});
+const interaction:WriteActionInput={kind:'video.coin',aid:'42',count:2};
+const publish:WriteActionInput={kind:'open.video.publish',uid:'111',video:{file:'/media/test.mp4'},metadata:{title:'test',tid:21,tag:'test'}};
+kit.writes.preview(interaction); kit.writes.preview(publish);
+void kit.reads.popular({page:1});
+void kit.media.call('online_frames',{reference:'BV1xx411c7mD',contactSheet:true});
+void kit.open.call('open_article_list',{page:1});
+// @ts-expect-error New SDK inputs must retain their declared types.
+kit.reads.popular({page:'wrong'});
 void video; void runCli; void createMcpServer;
 // @ts-expect-error The SDK must not expose arbitrary POST requests.
 kit.reads.post('/msg/send',{});
@@ -146,10 +161,11 @@ await writeFile(
   `
 import assert from 'node:assert/strict';
 import {Client} from '@modelcontextprotocol/sdk/client/index.js';
+import {operations} from '@bili-agent-kit/core';
 import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js';
 const client=new Client({name:'smoke',version:'1'});
 const transport=new StdioClientTransport({command:process.execPath,args:[${JSON.stringify(mcpEntry)},'--config',${JSON.stringify(config)}],stderr:'pipe'});
-try { await client.connect(transport); const listed=await client.listTools(); assert.equal(listed.tools.length,14); const result=await client.callTool({name:'bili_write_preview',arguments:{action:{kind:'dm.send',uid:'222',text:'hello'}}}); assert.equal(result.structuredContent.ok,true); console.log('Built MCP stdio passed'); } finally {await client.close();}
+try { await client.connect(transport); const listed=await client.listTools(); assert.deepEqual(listed.tools.map(t=>t.name).sort(),Object.keys(operations).map(name=>"bili_"+name).sort()); const result=await client.callTool({name:'bili_write_preview',arguments:{action:{kind:'dm.send',uid:'222',text:'hello'}}}); assert.equal(result.structuredContent.ok,true); console.log('Built MCP stdio passed'); } finally {await client.close();}
 `,
 );
 process.stdout.write(run(process.execPath, [probe], dirname(probe)));

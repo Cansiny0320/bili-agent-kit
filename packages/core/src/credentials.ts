@@ -67,7 +67,10 @@ export class FileCredentials {
     }
   }
   async update(
-    fn: (previous: Credentials | undefined) => Promise<Credentials | undefined>,
+    fn: (
+      previous: Credentials | undefined,
+      checkpoint: (credentials: Credentials) => Promise<void>,
+    ) => Promise<Credentials | undefined>,
   ): Promise<void> {
     await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
     let lock;
@@ -82,23 +85,26 @@ export class FileCredentials {
     const temp = `${this.path}.${randomUUID()}.tmp`;
     try {
       const previous = await this.read();
-      const next = await fn(previous);
+      const checkpoint = async (credentials: Credentials) => {
+        await writePrivateFile(temp, JSON.stringify(parse(credentialSchema, credentials)) + "\n");
+        await rename(temp, this.path);
+        if (process.platform !== "win32") {
+          const directory = await open(dirname(this.path), "r");
+          try {
+            await directory.sync();
+          } finally {
+            await directory.close();
+          }
+        }
+      };
+      const next = await fn(previous, checkpoint);
       if (next === undefined) {
         await unlink(this.path).catch((error) => {
           if (!isMissing(error)) throw error;
         });
         return;
       }
-      await writePrivateFile(temp, JSON.stringify(parse(credentialSchema, next)) + "\n");
-      await rename(temp, this.path);
-      if (process.platform !== "win32") {
-        const directory = await open(dirname(this.path), "r");
-        try {
-          await directory.sync();
-        } finally {
-          await directory.close();
-        }
-      }
+      await checkpoint(next);
     } finally {
       await unlink(temp).catch(() => {});
       await lock.close();

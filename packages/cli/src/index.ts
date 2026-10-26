@@ -21,11 +21,13 @@ export async function runCli(
       ok: true,
       data: {
         usage:
-          "bili-agent --config config.local.json <operation|auth.login|auth.status|auth.logout|admin.approve|admin.reconcile|admin.resume> <JSON|->",
+          "bili-agent --config config.local.json <operation|auth.login|auth.status|auth.logout|auth.refresh-check|auth.refresh|admin.approve|admin.reconcile|admin.resume> <JSON|->",
         auth: {
           "auth.login": { png: "optional new PNG path" },
           "auth.status": {},
           "auth.logout": {},
+          "auth.refresh-check": {},
+          "auth.refresh": {},
         },
         operations: describeOperations(),
       },

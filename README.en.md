@@ -9,14 +9,18 @@
   <a href="README.md">简体中文</a> · <a href="README.en.md">English</a> · <a href="https://github.com/Cansiny0320/bili-agent-kit/issues">Feedback</a>
 </p>
 
-bili-agent-kit provides a TypeScript SDK, command-line tools and an MCP server for reading Bilibili videos, subtitles, comments and messages. It also supports QR login and sending replies after approval. Connect it to an AI assistant that supports MCP, or call it from your own application.
+bili-agent-kit provides a TypeScript SDK, command-line tools and an MCP server for reading Bilibili content, processing media, receiving events and performing approved interactions or submissions.
 
 ## What can it do?
 
-- **Read content**: video metadata, search results, official subtitles, comments, trusted-target DMs, live room details and recent live chat.
-- **Receive DMs**: save reading progress and continue after a restart. Your application decides when to check for new messages.
-- **Send after review**: add/delete comments, send DMs and live chat. Writes are disabled by default and require an allowlisted target and administrator-approved draft.
-- **Sample frames**: optionally use your own ffmpeg to sample up to 12 frames from a configured local video. No automatic video downloads or ffmpeg installation.
+- **Discover and read**: popular videos, rankings, search, users, uploads, favorites, history, watch later, dynamics, articles, comments, video danmaku and Bilibili AI summaries.
+- **Receive events**: trusted DMs, replies, mentions, likes, comments and recent live chat, with persistent deduplication and receipt/ack delivery.
+- **Process media**: resolve BV/AV/URLs and multipart videos, download video/audio, clip audio, sample frames and contact sheets, export subtitles/articles and return native MCP images.
+- **Interact after review**: likes, favorites, follows, coins, triple actions, comments, DMs, video/live danmaku and text/image dynamic creation, editing and deletion.
+- **Manage creator content**: read creator metrics and use independent official open-platform authorization for video/article queries, uploads, publishing, editing and deletion.
+- **Manage sessions**: Bilibili-app QR login and explicit Cookie refresh through the trusted CLI/SDK.
+
+See the [usage reference](docs/usage.md) for operation inputs, media directories and open-platform authorization.
 
 ## Quick start
 
@@ -29,7 +33,7 @@ Requires Node.js **22.18+, 24.11+ or 26+**. Node.js 23/25 are unsupported.
 | [@bili-agent-kit/mcp](https://www.npmjs.com/package/@bili-agent-kit/mcp)   | Connect agents through stdio MCP                     |
 
 ```sh
-npx --yes @bili-agent-kit/cli@0.1.0 help
+npx --yes @bili-agent-kit/cli@0.2.0 help
 ```
 
 Create `config.local.json` for both CLI and MCP:
@@ -47,7 +51,7 @@ Paths in the config are relative to its directory. Writes are disabled by defaul
 Read a video's metadata:
 
 ```sh
-npx --yes @bili-agent-kit/cli@0.1.0 --config config.local.json video '{"bvid":"BV1xx411c7mD"}'
+npx --yes @bili-agent-kit/cli@0.2.0 --config config.local.json video '{"bvid":"BV1xx411c7mD"}'
 ```
 
 The CLI writes JSON only to stdout. Every response includes `version: 1` and `ok`; errors include a typed code and a nonzero exit status. Pass `-` to read JSON from stdin.
@@ -57,8 +61,8 @@ The CLI writes JSON only to stdout. Every response includes `version: 1` and `ok
 The example config includes `credentialsFile`. Run these commands in a terminal you control:
 
 ```sh
-npx --yes @bili-agent-kit/cli@0.1.0 --config config.local.json auth.login '{}'
-npx --yes @bili-agent-kit/cli@0.1.0 --config config.local.json auth.status '{}'
+npx --yes @bili-agent-kit/cli@0.2.0 --config config.local.json auth.login '{}'
+npx --yes @bili-agent-kit/cli@0.2.0 --config config.local.json auth.status '{}'
 ```
 
 Scan the QR printed to stderr with the Bilibili app and confirm on your phone. Use `'{"png":"login-qr.png"}'` to also create a PNG relative to the working directory; the path must not already exist. Login waits at most 3 minutes for scanning; Ctrl+C cancels. Failure preserves previous credentials.
@@ -68,7 +72,7 @@ The file is plaintext with restricted permissions and is replaced only after acc
 Run this only when you want to log out:
 
 ```sh
-npx --yes @bili-agent-kit/cli@0.1.0 --config config.local.json auth.logout '{}'
+npx --yes @bili-agent-kit/cli@0.2.0 --config config.local.json auth.logout '{}'
 ```
 
 ### Connect over MCP
@@ -80,20 +84,20 @@ Configure your AI assistant to run the npm package, replacing the config path wi
   "mcpServers": {
     "bilibili": {
       "command": "npx",
-      "args": ["--yes", "@bili-agent-kit/mcp@0.1.0", "--config", "/absolute/path/config.local.json"]
+      "args": ["--yes", "@bili-agent-kit/mcp@0.2.0", "--config", "/absolute/path/config.local.json"]
     }
   }
 }
 ```
 
-Windows paths can use `D:/bilibili/config.local.json`. MCP exposes 14 tools. Approval, policy changes, credential administration and account recovery are not exposed.
+Windows paths can use `D:/bilibili/config.local.json`. MCP and CLI `help` derive their complete operation lists from the same registry. Approval, policy changes, credential administration and account recovery are not exposed.
 
 ### Use the SDK
 
 Install the SDK in your own project:
 
 ```sh
-npm install @bili-agent-kit/core@0.1.0
+npm install @bili-agent-kit/core@0.2.0
 ```
 
 Use ESM imports to read public video metadata:
@@ -132,7 +136,7 @@ pnpm smoke
 
 After building, run `node packages/cli/dist/main.mjs help` to use the local CLI. Read and login operations still require an explicit config file.
 
-`pnpm fmt` changes formatting. Tests use simulated network responses; `smoke` packages and installs all three packages, then checks the SDK, CLI and MCP server. Sending from a real account has not been verified. Live chat tools read recent messages rather than listening continuously; your application must schedule repeated calls.
+`pnpm fmt` changes formatting. Tests use simulated network responses; set `BILI_TEST_FFMPEG` for real local decoding tests. `smoke` packages and installs all three packages, then checks the SDK, CLI and MCP server. The expanded APIs and writes have not completed live-account acceptance testing. Live chat tools read recent messages rather than listening continuously; your application must schedule repeated calls.
 
 ## License
 

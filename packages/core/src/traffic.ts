@@ -18,7 +18,16 @@ export function checkPaused(state: State, account: string, now: number): void {
   if (state.traffic.until > now)
     throw new KitError("TRAFFIC_PAUSED", "Platform backoff is active; wait before retrying.");
 }
-export async function boundedJson(response: Response): Promise<unknown> {
+export function parseJson(text: string): unknown {
+  return JSON.parse(text, (_key: string, value: unknown, context?: { source?: string }) => {
+    if (typeof value === "number" && Number.isInteger(value) && !Number.isSafeInteger(value)) {
+      if (context?.source && /^-?\d+$/.test(context.source)) return context.source;
+      throw new KitError("UPSTREAM", "Unsafe upstream integer.");
+    }
+    return value;
+  }) as unknown;
+}
+export async function boundedBody(response: Response, limit = 8 * 1024 * 1024): Promise<Buffer> {
   if (!response.body) throw new KitError("UPSTREAM", "Empty upstream response.");
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -28,13 +37,19 @@ export async function boundedJson(response: Response): Promise<unknown> {
       const next = await reader.read();
       if (next.done) break;
       size += next.value.byteLength;
-      if (size > 8 * 1024 * 1024)
-        throw new KitError("UPSTREAM", "Upstream response exceeds size limit.");
+      if (size > limit) throw new KitError("UPSTREAM", "Upstream response exceeds size limit.");
       chunks.push(next.value);
     }
-    return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
+    return Buffer.concat(chunks);
   } catch {
     await reader.cancel().catch(() => {});
+    throw new KitError("UPSTREAM", "Invalid or oversized upstream JSON.");
+  }
+}
+export async function boundedJson(response: Response): Promise<unknown> {
+  try {
+    return parseJson((await boundedBody(response)).toString("utf8"));
+  } catch {
     throw new KitError("UPSTREAM", "Invalid or oversized upstream JSON.");
   }
 }
@@ -55,6 +70,7 @@ export class Traffic {
     account: string,
     authenticated: boolean,
     cdn = false,
+    bodyOptions?: { format?: "bytes" | "text" | "location"; limit?: number; writeGroup?: string },
   ): Promise<unknown> {
     const writing = init.method === "POST";
     const token = randomUUID();
@@ -89,15 +105,22 @@ export class Traffic {
           const gap = url.pathname.endsWith("/send_msg")
             ? RISK_DEFAULTS.dmGapMs
             : RISK_DEFAULTS.writeGapMs;
+          const sameGroup =
+            !!bodyOptions?.writeGroup && a.lastWriteGroup === bodyOptions.writeGroup;
           if (
-            a.writeHour >= RISK_DEFAULTS.writeHourly ||
-            a.writeDay >= RISK_DEFAULTS.writeDaily ||
-            now - a.lastWrite < gap
+            (!sameGroup && a.writeHour >= RISK_DEFAULTS.writeHourly) ||
+            (!sameGroup && a.writeDay >= RISK_DEFAULTS.writeDaily) ||
+            (now - a.lastWrite < gap &&
+              (!bodyOptions?.writeGroup || a.lastWriteGroup !== bodyOptions.writeGroup))
           )
             throw new KitError("RATE_LIMITED", "Write budget or cooldown reached.");
-          a.writeHour++;
-          a.writeDay++;
+          if (!sameGroup) {
+            a.writeHour++;
+            a.writeDay++;
+          }
           a.lastWrite = now;
+          if (bodyOptions?.writeGroup) a.lastWriteGroup = bodyOptions.writeGroup;
+          else delete a.lastWriteGroup;
         } else {
           if (a.readHour >= RISK_DEFAULTS.readHourly || a.readDay >= RISK_DEFAULTS.readDaily)
             throw new KitError("RATE_LIMITED", "Read budget reached.");
@@ -116,12 +139,19 @@ export class Traffic {
     try {
       const response = await this.fetcher(url, {
         ...init,
-        redirect: "error",
+        redirect: bodyOptions?.format === "location" ? "manual" : "error",
         signal: AbortSignal.timeout(30000),
       });
       let payload: unknown;
       try {
-        payload = await boundedJson(response);
+        payload =
+          bodyOptions?.format === "location"
+            ? response.headers.get("location")
+            : bodyOptions?.format
+              ? await boundedBody(response, bodyOptions.limit)
+              : await boundedJson(response);
+        if (bodyOptions?.format === "text" && Buffer.isBuffer(payload))
+          payload = payload.toString("utf8");
       } catch {
         payload = undefined;
       }
@@ -132,7 +162,7 @@ export class Traffic {
       const code = typeof record.code === "number" ? record.code : undefined;
       const risk =
         [412, 429].includes(response.status) ||
-        (code !== undefined && [-412, -352, -799, -509, -10403].includes(code));
+        (code !== undefined && [-412, -352, -799, -509, -10403, 127009, 127306].includes(code));
       const manual =
         code === 12015 ||
         code === -105 ||
@@ -165,14 +195,16 @@ export class Traffic {
         );
       if (risk || manual)
         throw new KitError("TRAFFIC_PAUSED", "Platform requested backoff or account review.");
-      if (!response.ok || payload === undefined)
+      const redirect =
+        bodyOptions?.format === "location" && [301, 302, 303, 307, 308].includes(response.status);
+      if ((!response.ok && !redirect) || payload === undefined)
         throw new KitError("UPSTREAM", "Upstream did not return a successful JSON response.");
       const anonymousKeys =
         !authenticated && url.pathname === "/x/web-interface/nav" && code === -101;
       if (!cdn && code !== 0 && !anonymousKeys)
         throw new KitError(
           code === -101 ? "AUTH_REQUIRED" : "UPSTREAM",
-          "Bilibili rejected the request.",
+          `Bilibili rejected the request (code ${String(code)}).`,
         );
       return cdn ? payload : record.data;
     } catch (error) {

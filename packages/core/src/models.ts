@@ -95,3 +95,9 @@ export function upstream<S extends z.ZodType>(schema: S, input: unknown): z.outp
   if (!parsed.success) throw new KitError("UPSTREAM", "Unexpected upstream response shape.");
   return parsed.data;
 }
+
+export function upstreamText(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  if (typeof value !== "string") throw new KitError("UPSTREAM", "Unexpected upstream text field.");
+  return value;
+}

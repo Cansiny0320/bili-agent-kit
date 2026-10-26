@@ -12,11 +12,12 @@ export interface StateStore {
 }
 function emptyState(): State {
   return {
-    version: 1,
+    version: 2,
     identities: {},
     sequence: 0,
     drafts: {},
     cursors: {},
+    events: {},
     deviceId: randomUUID(),
     traffic: { lastDispatch: -1e12, until: 0, streak: 0, manual: {}, accounts: {} },
   };
@@ -79,6 +80,27 @@ export class FileStore implements StateStore {
     try {
       await lock.writeFile(JSON.stringify({ pid: process.pid, createdAt: Date.now() }));
       const state = await this.#read();
+      try {
+        const old = await readFile(join(this.directory, "state.json"), "utf8");
+        if ((JSON.parse(old) as { version?: number }).version === 1) {
+          let backup;
+          try {
+            backup = await open(join(this.directory, "state.v1.backup.json"), "wx", 0o600);
+          } catch (error) {
+            if (!isCode(error, "EEXIST")) throw error;
+          }
+          if (backup) {
+            try {
+              await backup.writeFile(old);
+              await backup.sync();
+            } finally {
+              await backup.close();
+            }
+          }
+        }
+      } catch (error) {
+        if (!isCode(error, "ENOENT")) throw error;
+      }
       const result = fn(state);
       if (result instanceof Promise)
         throw new KitError("STATE_INVALID", "State transactions must be synchronous.");

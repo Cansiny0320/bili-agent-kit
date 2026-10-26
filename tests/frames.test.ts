@@ -1,6 +1,6 @@
 import { expect, it, vi } from "vite-plus/test";
 import { EventEmitter } from "node:events";
-import { mkdtemp, mkdir, writeFile, realpath } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sampleFrames } from "../packages/core/src/frames.js";
@@ -34,9 +34,12 @@ it("uses argument arrays, restricted protocols, hidden windows and a bounded pro
   vi.mocked(spawn).mockImplementation(((_file: string, args: string[]) => {
     const child = new EventEmitter();
     const pattern = args.at(-1)!;
-    void writeFile(pattern.replace("%03d", "001"), "fixture-frame").then(() =>
-      child.emit("exit", 0),
-    );
+    const source = args[args.indexOf("-i") + 1]!;
+    void readFile(source, "utf8").then(async (data) => {
+      expect(data).toBe("fixture");
+      await writeFile(pattern.replace("%03d", "001"), "fixture-frame");
+      child.emit("exit", 0);
+    });
     return child;
   }) as typeof spawn);
   const result = await sampleFrames(
@@ -46,7 +49,7 @@ it("uses argument arrays, restricted protocols, hidden windows and a bounded pro
   expect(result.files).toHaveLength(1);
   expect(spawn).toHaveBeenCalledWith(
     "fixture-ffmpeg",
-    expect.arrayContaining(["file,pipe", await realpath(file), "-frames:v", "1"]),
+    expect.arrayContaining(["file,pipe", expect.stringContaining("source.mp4"), "-frames:v", "1"]),
     expect.objectContaining({ shell: false, windowsHide: true, timeout: 120000 }),
   );
 });

@@ -1,9 +1,13 @@
 import { z } from "zod";
 import { KitError } from "./errors.js";
+import { openActions } from "./open-actions.js";
+import { extendedActions } from "./actions.js";
 
 export const id = z.string().regex(/^[1-9]\d{0,19}$/);
 export const bvid = z.string().regex(/^BV[0-9A-Za-z]{10}$/);
 export const actionSchema = z.discriminatedUnion("kind", [
+  ...extendedActions,
+  ...openActions,
   z.strictObject({
     kind: z.literal("comment.add"),
     oid: id,
@@ -29,14 +33,25 @@ export type WriteAction = z.infer<typeof actionSchema>;
 export type WriteActionInput = z.input<typeof actionSchema>;
 export const policySchema = z.strictObject({
   writesEnabled: z.boolean().default(false),
+  allowedActions: z.array(z.string().min(1).max(80)).max(100).default([]),
   allowedTargets: z
-    .array(z.string().regex(/^(comment|dm|live):[1-9]\d{0,19}$/))
+    .array(
+      z
+        .string()
+        .regex(/^(comment|dm|live|video|user|dynamic|account|favorite|open):[1-9]\d{0,19}$/),
+    )
     .max(1000)
     .default([]),
   trustedDmTargets: z.array(id).max(1000).default([]),
 });
 export type Policy = z.infer<typeof policySchema>;
 export const credentialSchema = z.strictObject({
+  refresh_token: z
+    .string()
+    .min(1)
+    .max(4096)
+    .regex(/^[^\r\n]+$/)
+    .optional(),
   sessdata: z
     .string()
     .min(1)
@@ -70,9 +85,17 @@ export function parse<S extends z.ZodType>(schema: S, input: unknown): z.output<
   return result.data;
 }
 export function targetOf(action: WriteAction): string {
+  if (action.kind.startsWith("open.") && "uid" in action) return `open:${action.uid}`;
   if (action.kind === "dm.send") return `dm:${action.uid}`;
   if (action.kind === "live.send") return `live:${action.roomId}`;
-  return `comment:${action.oid}`;
+  if ("oid" in action) return `comment:${action.oid}`;
+  if (action.kind === "favorite.add" || action.kind === "favorite.remove")
+    return `favorite:${action.folderId}`;
+  if ("aid" in action) return `video:${action.aid}`;
+  if ("dynamicId" in action) return `dynamic:${action.dynamicId}`;
+  if (action.kind === "dynamic.create") return `account:${action.uid}`;
+  if ("uid" in action) return `user:${action.uid}`;
+  throw new KitError("INVALID_INPUT", "Unsupported action target.");
 }
 export const messageSchema = z.object({
   ts: z.number().finite().nonnegative(),
@@ -93,6 +116,12 @@ export const draftSchema = z.object({
   status: z.enum(["draft", "approved", "sending", "sent", "unknown", "rejected"]),
   approval: z.object({ digest: z.string(), by: z.string(), at: z.number() }).optional(),
   result: z.unknown().optional(),
+  steps: z
+    .record(
+      z.string(),
+      z.object({ status: z.enum(["pending", "done", "failed"]), result: z.unknown().optional() }),
+    )
+    .default({}),
 });
 export type Draft = z.infer<typeof draftSchema>;
 const counterSchema = z.object({
@@ -103,6 +132,7 @@ const counterSchema = z.object({
   writeHour: z.number(),
   writeDay: z.number(),
   lastWrite: z.number(),
+  lastWriteGroup: z.string().optional(),
 });
 export const cursorSchema = z.object({
   revision: z.number().int(),
@@ -112,11 +142,27 @@ export const cursorSchema = z.object({
 });
 export type Cursor = z.infer<typeof cursorSchema>;
 export const stateSchema = z.object({
-  version: z.literal(1),
+  version: z.union([z.literal(1), z.literal(2)]).transform(() => 2 as const),
   identities: z.record(z.string(), id).default({}),
   sequence: z.number().int().nonnegative(),
   drafts: z.record(z.string(), draftSchema),
   cursors: z.record(z.string(), cursorSchema),
+  events: z
+    .record(
+      z.string(),
+      z.object({
+        revision: z.number().int(),
+        since: z.number().nonnegative().default(0),
+        seen: z.array(z.string()),
+        pending: z.array(
+          z.object({
+            receipt: z.string().uuid(),
+            message: messageSchema.extend({ data: z.unknown() }),
+          }),
+        ),
+      }),
+    )
+    .default({}),
   deviceId: z.string(),
   traffic: z.object({
     lastDispatch: z.number(),

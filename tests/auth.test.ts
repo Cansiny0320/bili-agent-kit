@@ -57,10 +57,12 @@ it("handles waiting, scanned and verified success with bounded polling and no re
   expect(result).toEqual({
     status: "success",
     account: { uid: "111", name: "fixture" },
-    credentials: fakeCredentials,
+    credentials: { ...fakeCredentials, refresh_token: "do-not-return" },
   });
   expect(clock.now() - start).toBeGreaterThanOrEqual(6000);
-  expect(JSON.stringify(result)).not.toContain("do-not-return");
+  expect(JSON.stringify(result.status === "success" ? result.account : result)).not.toContain(
+    "do-not-return",
+  );
   expect(calls.every((c) => c.init?.redirect === "error")).toBe(true);
 });
 it("rejects missing cookies, unverified login, foreign QR URL, and unknown status without leaking upstream", async () => {
