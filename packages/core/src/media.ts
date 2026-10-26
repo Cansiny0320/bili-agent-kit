@@ -82,6 +82,26 @@ export function cdnUrl(value: string): URL {
     throw new KitError("FORBIDDEN", "Media URL is outside the allowed Bilibili CDN.");
   return url;
 }
+function streamUrl(stream: unknown): string {
+  const s = object(stream);
+  const candidates = [
+    s.baseUrl,
+    s.base_url,
+    s.url,
+    ...(Array.isArray(s.backupUrl) ? s.backupUrl : []),
+    ...(Array.isArray(s.backup_url) ? s.backup_url : []),
+  ];
+  let firstError: unknown;
+  for (const candidate of candidates) {
+    if (typeof candidate !== "string") continue;
+    try {
+      return cdnUrl(candidate).href;
+    } catch (error) {
+      firstError ??= error;
+    }
+  }
+  throw firstError ?? new KitError("UPSTREAM", "Missing stream URL.");
+}
 export async function mediaImages(root: string, files: string[]): Promise<MediaImage[]> {
   const images: MediaImage[] = [];
   for (const file of files.slice(0, 12)) {
@@ -177,10 +197,7 @@ export class Media {
     const limit = options.maxBytes ?? 128 * 1024 * 1024;
     let bytes = 0;
     const save = async (stream: unknown, name: string) => {
-      const s = object(stream),
-        url = s.baseUrl ?? s.base_url ?? s.url;
-      if (typeof url !== "string") throw new KitError("UPSTREAM", "Missing stream URL.");
-      const body = await this.fetchBytes(url, limit - bytes);
+      const body = await this.fetchBytes(streamUrl(stream), limit - bytes);
       bytes += body.length;
       const file = join(dir, name);
       await writeFile(file, body, { flag: "wx", mode: 0o600 });

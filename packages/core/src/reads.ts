@@ -163,10 +163,16 @@ export class ContentReads {
           type: String(a.type),
         });
       case "user_dynamics":
-        return get("/x/polymer/web-dynamic/v1/feed/space", {
-          host_mid: uid,
-          offset: String(a.offset),
-        });
+        return get(
+          "/x/polymer/web-dynamic/v1/feed/space",
+          {
+            host_mid: uid,
+            offset: String(a.offset),
+            platform: "web",
+            timezone_offset: new Date(this.client.traffic.clock.now()).getTimezoneOffset(),
+          },
+          true,
+        );
       case "dynamic":
         return get("/x/polymer/web-dynamic/v1/detail", { id: String(a.dynamicId) });
       case "articles":

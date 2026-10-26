@@ -183,20 +183,36 @@ export async function executeExtended(
         });
       }
       const dyn_req = {
-        scene: pics.length ? 2 : 1,
+        scene: 2,
         content: { contents: [{ raw_text: action.text, type: 1, biz_id: "" }] },
-        pics,
+        ...(pics.length ? { pics } : {}),
         meta: { app_meta: { from: "create.dynamic.web", mobi_app: "web" } },
       };
+      const editing = action.kind === "dynamic.edit";
+      if (editing) {
+        // The edit endpoint can accept unchecked content without preserving its text.
+        await step("submit_check", () =>
+          client.postBody(
+            `/x/dynamic/feed/create/submit_check?csrf=${encodeURIComponent(csrf)}`,
+            {
+              dyn_id_str: action.dynamicId,
+              content: dyn_req.content,
+              scene: dyn_req.scene,
+              ...(pics.length ? { pics } : {}),
+            },
+            s,
+            draftId,
+          ),
+        );
+      }
       return step("send", () =>
-        action.kind === "dynamic.create"
-          ? client.postBody("/x/dynamic/feed/create/dyn", { dyn_req }, s, draftId, true)
-          : client.postBody(
-              "/x/dynamic/feed/edit/dyn?platform=web",
-              { dyn_id_str: action.dynamicId, dyn_req, csrf },
-              s,
-              draftId,
-            ),
+        client.postBody(
+          `/x/dynamic/feed/${editing ? "edit" : "create"}/dyn?platform=web`,
+          { dyn_req, ...(editing ? { dyn_id_str: action.dynamicId } : {}) },
+          s,
+          draftId,
+          true,
+        ),
       );
     }
   }

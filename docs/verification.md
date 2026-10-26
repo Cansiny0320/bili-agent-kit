@@ -1,5 +1,18 @@
 # Verification record
 
+## 真实账号复测与修复（2026-10-26）
+
+本次使用已有登录和共享请求状态验证本地修复版本，未发布新版本。
+
+- 动态编辑：补齐 query 中的 CSRF，并在编辑前调用 `submit_check`。对照请求确认，省略内容检查时接口可能返回成功但正文为空；补齐后，最终代码在新测试动态上完成创建、编辑、正文回读和删除。请求格式同时对齐 `scene: 2`、空图片字段和 `platform` 签名参数。两条测试动态均已删除。
+- 媒体：从接口返回的首选和备用地址中，先选择符合现有 CDN 校验规则的地址再下载。真实音频、视频下载和在线抽帧通过，得到 3 张 JPEG。HTTPS、域名和端口约束保持不变；收到风控响应后不切换地址重试。
+- 普通写操作：按用户要求移除本地 120 秒冷却，已验证不同获批操作可以连续执行。私信的 60 秒冷却、请求间隔、账号预算和平台风控退避保持原有规则。
+- 空间列表：`user_dynamics` 已补齐当前网页使用的 WBI、`platform` 和 `timezone_offset`，真实复测仍返回 HTTP 412，尚未解决。`user_videos` 之前也返回 412；本轮因共享退避未继续请求，未加入未经验证的兼容参数。
+
+本次维护范围的 21 个测试文件共 87 项通过，包含真实 FFmpeg 解码；`pnpm build`、`pnpm smoke` 通过。完整 `pnpm check` 和 `pnpm test` 受到另一会话新增的 `tests/collections-watch-later.test.ts` 影响：该文件尚有格式问题及 4 项待实现测试，未修改这部分工作。本次改动文件的格式、lint 和类型检查通过；排除该待实现文件后的 TypeScript 检查通过。
+
+动态协议另行核对了 B 站当前页面加载的[官方脚本](https://s1.hdslb.com/bfs/static/2233-monorepo/dyn-home/static/js/index.c648f6cd.js)：`uX` 先执行内容检查，仅成功后才调用 `uZ` 提交编辑；`u3`、`u9` 负责请求内容。此处为静态协议依据，实际行为以上述账号复测为准。测试凭据、账号标识、私信和完整响应未加入仓库。
+
 Validated locally on 2026-10-25 with Windows, Node 24.19.0, pnpm 12.15.0, Vite+ 1.4.0 and TypeScript 7.0.2.
 
 - `pnpm check`: formatting, Oxlint type-aware checks and TypeScript passed without warnings/errors.

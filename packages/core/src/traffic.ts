@@ -9,7 +9,6 @@ export const RISK_DEFAULTS = {
   readDaily: 3000,
   writeHourly: 12,
   writeDaily: 30,
-  writeGapMs: 120000,
   dmGapMs: 60000,
 } as const;
 export function checkPaused(state: State, account: string, now: number): void {
@@ -102,9 +101,7 @@ export class Traffic {
           a.writeDay = 0;
         }
         if (writing) {
-          const gap = url.pathname.endsWith("/send_msg")
-            ? RISK_DEFAULTS.dmGapMs
-            : RISK_DEFAULTS.writeGapMs;
+          const gap = url.pathname.endsWith("/send_msg") ? RISK_DEFAULTS.dmGapMs : 0;
           const sameGroup =
             !!bodyOptions?.writeGroup && a.lastWriteGroup === bodyOptions.writeGroup;
           if (

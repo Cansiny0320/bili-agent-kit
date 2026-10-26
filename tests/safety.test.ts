@@ -73,17 +73,18 @@ it("comment form and WBI query follow the upstream contract without exposing CSR
   expect(call.url.searchParams.get("w_rid")).toBe(signature.get("w_rid"));
   expect(JSON.stringify(sent)).not.toContain(fakeCredentials.bili_jct);
 });
-it("canonical live room and delete-comment targets produce the intended forms", async () => {
+it("independent approved writes keep their target forms without an extra write cooldown", async () => {
   const { kit, calls, clock } = await setup((url) =>
     json(url.pathname.endsWith("/get_info") ? { room_id: 99 } : {}),
   );
   const live = await kit.writes.prepare({ kind: "live.send", roomId: "99", text: "hello" }, "live");
   await kit.admin.approve(live.id, live.digest, "operator");
   await kit.writes.execute(live.id);
-  clock.advance(120000);
+  const afterFirstWrite = clock.now();
   const del = await kit.writes.prepare({ kind: "comment.delete", oid: "42", rpid: "12" }, "delete");
   await kit.admin.approve(del.id, del.digest, "operator");
   await kit.writes.execute(del.id);
+  expect(clock.now() - afterFirstWrite).toBeLessThan(60000);
   const posts = calls.filter((c) => c.init.method === "POST");
   expect(posts.map((c) => c.url.pathname)).toEqual(["/msg/send", "/x/v2/reply/del"]);
   expect(new URLSearchParams(posts[0]?.init.body as string).get("roomid")).toBe("99");

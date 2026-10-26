@@ -1,9 +1,130 @@
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, it } from "vite-plus/test";
+import { expect, it, vi } from "vite-plus/test";
 import { BiliKit } from "../packages/core/src/kit.js";
 import { setup, json } from "./helpers.js";
+
+async function downloadFixture(
+  playback: unknown,
+  respond = () => new Response(new Uint8Array([1, 2, 3])),
+) {
+  const root = await mkdtemp(join(tmpdir(), "bili-media-"));
+  const ctx = await setup((url) => {
+    if (url.pathname.includes("/view"))
+      return json({
+        aid: 42,
+        bvid: "BV1xx411c7mD",
+        pages: [{ cid: 10, page: 1, part: "one", duration: 10 }],
+      });
+    if (url.pathname.includes("/playurl")) return json(playback);
+    return respond();
+  });
+  const kit = new BiliKit({
+    ...ctx.options,
+    media: { mediaRoot: root, outputRoot: root, ffmpegPath: "ffmpeg", maxBytes: 1024 },
+  });
+  return { ...ctx, kit, root };
+}
+
+it.each([
+  ["baseUrl", "backupUrl"],
+  ["base_url", "backup_url"],
+  ["url", "backup_url"],
+])("selects the first allowed %s / %s CDN URL before downloading", async (primary, backup) => {
+  const allowed = "https://upos-sz.bilivideo.com/first.m4s";
+  const stream = {
+    [primary]: "https://edge.mcdn.bilivideo.cn:8082/audio.m4s",
+    [backup]: [
+      "not-a-url",
+      "http://upos-sz.bilivideo.com/insecure.m4s",
+      "https://example.com/private",
+      "https://user:password@upos-sz.bilivideo.com/private.m4s",
+      allowed,
+      "https://upos-sz.bilivideo.com/second.m4s",
+    ],
+  };
+  const ctx = await downloadFixture(
+    primary === "url" ? { durl: [stream] } : { dash: { audio: [stream] } },
+  );
+  const result = await ctx.kit.media.download({
+    reference: "BV1xx411c7mD",
+    kind: primary === "url" ? "video" : "audio",
+  });
+  expect(await readFile(result.file)).toEqual(Buffer.from([1, 2, 3]));
+  expect(result.bytes).toBe(3);
+  const mediaCalls = ctx.calls.filter((call) => call.url.hostname !== "api.bilibili.com");
+  expect(mediaCalls.map((call) => call.url.href)).toEqual([allowed]);
+  expect(new Headers(mediaCalls[0]!.init.headers).has("cookie")).toBe(false);
+});
+
+it("does not request any media URL when the primary and backups are invalid", async () => {
+  const ctx = await downloadFixture({
+    dash: {
+      audio: [
+        {
+          baseUrl: "https://edge.mcdn.bilivideo.cn:8082/audio.m4s",
+          backupUrl: ["not-a-url", "https://example.com/private"],
+          backup_url: ["http://upos-sz.bilivideo.com/insecure.m4s"],
+        },
+      ],
+    },
+  });
+  await expect(
+    ctx.kit.media.download({ reference: "BV1xx411c7mD", kind: "audio" }),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  expect(ctx.calls.every((call) => call.url.hostname === "api.bilibili.com")).toBe(true);
+  expect(await readdir(ctx.root)).toEqual([]);
+});
+
+it("prefers a permitted primary URL without requesting backups", async () => {
+  const primary = "https://upos-sz.bilivideo.com/primary.m4s";
+  const ctx = await downloadFixture({
+    dash: {
+      audio: [
+        {
+          baseUrl: primary,
+          backupUrl: ["https://upos-sz.bilivideo.com/backup.m4s"],
+        },
+      ],
+    },
+  });
+  await ctx.kit.media.download({ reference: "BV1xx411c7mD", kind: "audio" });
+  expect(
+    ctx.calls
+      .filter((call) => call.url.hostname !== "api.bilibili.com")
+      .map((call) => call.url.href),
+  ).toEqual([primary]);
+});
+
+it("preserves media backoff and does not retry a backup after a risk response", async () => {
+  const primary = "https://upos-sz.bilivideo.com/primary.m4s";
+  const ctx = await downloadFixture(
+    {
+      dash: {
+        audio: [
+          {
+            baseUrl: primary,
+            backupUrl: ["https://upos-sz.bilivideo.com/backup.m4s"],
+          },
+        ],
+      },
+    },
+    () => new Response("blocked", { status: 412 }),
+  );
+  const fetchBytes = vi.spyOn(ctx.kit.media, "fetchBytes");
+  await expect(
+    ctx.kit.media.download({ reference: "BV1xx411c7mD", kind: "audio" }),
+  ).rejects.toMatchObject({ code: "TRAFFIC_PAUSED" });
+  expect(
+    ctx.calls
+      .filter((call) => call.url.hostname !== "api.bilibili.com")
+      .map((call) => call.url.href),
+  ).toEqual([primary]);
+  expect(fetchBytes).toHaveBeenCalledExactlyOnceWith(primary, 1024);
+  expect((await ctx.store.snapshot()).traffic.until).toBeGreaterThan(ctx.clock.now());
+  expect(await readdir(ctx.root)).toEqual([]);
+});
 
 it("rejects media URLs outside the Bilibili CDN without requesting them", async () => {
   const root = await mkdtemp(join(tmpdir(), "bili-media-"));

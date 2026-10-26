@@ -189,7 +189,7 @@ export class BiliClient {
       const nav = object(await this.get("/x/web-interface/nav", {}, false, API, session));
       const images = upstream(z.object({ img_url: z.string(), sub_url: z.string() }), nav.wbi_img);
       url.search = signWbi(
-        { csrf: session.credentials?.bili_jct ?? "" },
+        { ...Object.fromEntries(url.searchParams), csrf: session.credentials?.bili_jct ?? "" },
         images,
         this.traffic.clock.now(),
       );
