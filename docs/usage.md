@@ -231,13 +231,29 @@ CLI 使用 `-` 从 stdin 读取 JSON；退出码为成功 `0`、输入错误 `2`
 
 错误码包括 `CANCELLED`、`INVALID_INPUT`、`NOT_FOUND`、`AUTH_REQUIRED`、`FORBIDDEN`、`APPROVAL_REQUIRED`、`CONFLICT`、`UNKNOWN_OUTCOME`、`RATE_LIMITED`、`TRAFFIC_PAUSED`、`NETWORK`、`UPSTREAM`、`STATE_INVALID`、`STATE_BUSY`、`UNAVAILABLE`。错误不回显原始响应体、Cookie 或凭据提供器错误。
 
-## Workspace and packages
+## 开发与验证
+
+从源码开发需要 pnpm **12.15.0**：
+
+```sh
+git clone https://github.com/Cansiny0320/bili-agent-kit.git
+cd bili-agent-kit
+pnpm install --frozen-lockfile
+pnpm check
+pnpm test
+pnpm build
+pnpm smoke
+```
+
+构建后可用 `node packages/cli/dist/main.mjs help` 调用本地 CLI；读取或登录时仍需显式传入配置文件。
+
+`pnpm fmt` 会修改格式。测试使用模拟网络；`pnpm smoke` 会打包并安装三个包，检查 SDK、CLI 和 MCP 是否能正常使用。可通过 `BILI_TEST_FFMPEG` 指定本地 ffmpeg 运行真实媒体解码测试。新增接口与写操作未完成真实账号验收。
 
 `packages/core` owns all behavior and schemas; `packages/cli` and `packages/mcp` adapt them. Build output is ESM (`.mjs`) with TypeScript declarations (`.d.mts`). Vite+ uses its own version number for the bundled Vite API; the targeted pnpm peer rules acknowledge that alias. TypeScript 7.0.2 is stable, while Vite+'s declaration emitter currently warns that its TypeScript 7 integration is experimental; declaration files and package exports are checked by `pnpm smoke`.
 
 本页示例使用 `pnpm build` 后的本地 CLI；使用 npm 包时，将 `node packages/cli/dist/main.mjs` 替换为 `npx --yes @bili-agent-kit/cli@0.2.0`，其他参数保持不变。
 
-For local package verification, `pnpm --filter @bili-agent-kit/core pack --pack-destination ./artifacts` creates a package archive. When testing unpublished CLI/MCP changes, also supply the core tarball and a package-manager override resolving `@bili-agent-kit/core` to that local archive; otherwise the dependency would resolve from npm. `scripts/smoke.mjs` demonstrates the complete isolated installation. Repository scripts do not publish to npm.
+For local package verification, `pnpm --filter @bili-agent-kit/core pack --pack-destination ./artifacts` creates a package archive. When testing unpublished CLI/MCP changes, also supply the core tarball and a package-manager override resolving `@bili-agent-kit/core` to that local archive; otherwise the dependency would resolve from npm. `scripts/smoke.mjs` demonstrates the complete isolated installation. These development checks do not publish to npm; automatic releases are described below.
 
 ## 自动发布
 

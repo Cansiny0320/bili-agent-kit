@@ -3,38 +3,38 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/TypeScript-SDK%20%7C%20CLI%20%7C%20MCP-3178c6" alt="TypeScript SDK, CLI and MCP">
-  <a href="https://github.com/Cansiny0320/bili-agent-kit/actions/workflows/ci.yml"><img src="https://github.com/Cansiny0320/bili-agent-kit/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/Cansiny0320/bili-agent-kit/releases"><img src="https://img.shields.io/github/v/release/Cansiny0320/bili-agent-kit" alt="Latest release"></a>
 </p>
 <p align="center">
   <a href="README.md">简体中文</a> · <a href="README.en.md">English</a> · <a href="https://github.com/Cansiny0320/bili-agent-kit/issues">Feedback</a>
 </p>
 
-bili-agent-kit provides a TypeScript SDK, command-line tools and an MCP server for reading Bilibili content, processing media, receiving events and performing approved interactions or submissions.
+bili-agent-kit lets AI assistants and your own applications use Bilibili: search videos, read subtitles and comments, download video or audio, handle messages, and like, reply or publish after your approval.
+
+Choose an MCP server, command-line tool or TypeScript SDK to fit your setup.
 
 ## What can it do?
 
-- **Discover and read**: popular videos, rankings, search, users, uploads, favorites, history, watch later, dynamics, articles, comments, video danmaku and Bilibili AI summaries.
-- **Receive events**: trusted DMs, replies, mentions, likes, comments and recent live chat, with persistent deduplication and receipt/ack delivery.
-- **Process media**: resolve BV/AV/URLs and multipart videos, download video/audio, clip audio, sample frames and contact sheets, export subtitles/articles and return native MCP images.
-- **Interact after review**: likes, favorites, follows, coins, triple actions, comments, DMs, video/live danmaku and text/image dynamic creation, editing and deletion.
-- **Manage creator content**: read creator metrics and use independent official open-platform authorization for video/article queries, uploads, publishing, editing and deletion.
-- **Manage sessions**: Bilibili-app QR login and explicit Cookie refresh through the trusted CLI/SDK.
+- **Find content**: search videos and browse popular videos, rankings, creators' uploads, favorites, history, posts, articles, comments, danmaku and Bilibili AI summaries.
+- **Work with video and audio**: resolve BV/AV IDs, links and multipart videos; download video or audio, trim audio, extract frames, make contact sheets, and export subtitles and articles.
+- **Read messages**: fetch DMs, replies, mentions, like notifications, comments and recent live chat, with saved progress to reduce duplicate processing.
+- **Interact and post**: like, favorite, follow, send coins, use triple actions, reply to comments, send DMs or danmaku, and create, edit or delete text and image posts. Each action needs approval.
+- **Manage submissions**: view creator statistics and upload, publish, edit or delete videos and articles through Bilibili's official open platform. This requires separate application authorization.
+- **Log in**: scan a QR code with the Bilibili app, then check your login status or refresh cookies through the CLI or SDK.
 
-See the [usage reference](docs/usage.md) for operation inputs, media directories and open-platform authorization.
+See the [usage reference](docs/usage.md) for parameters and the [changelog](CHANGELOG.md) for version history.
+
+Video merging, audio trimming and frame extraction require a separate ffmpeg installation. Live chat tools fetch recent messages; your application must call them periodically. The APIs added in v0.2.0 have passed simulated tests but have not completed testing with a real account.
 
 ## Quick start
 
 Requires Node.js **22.18+, 24.11+ or 26+**. Node.js 23/25 are unsupported.
 
-| Package                                                                    | Purpose                                              |
-| -------------------------------------------------------------------------- | ---------------------------------------------------- |
-| [@bili-agent-kit/core](https://www.npmjs.com/package/@bili-agent-kit/core) | SDK for TypeScript / JavaScript applications         |
-| [@bili-agent-kit/cli](https://www.npmjs.com/package/@bili-agent-kit/cli)   | Command-line operations, QR login and administration |
-| [@bili-agent-kit/mcp](https://www.npmjs.com/package/@bili-agent-kit/mcp)   | Connect agents through stdio MCP                     |
-
-```sh
-npx --yes @bili-agent-kit/cli@0.2.0 help
-```
+| Package                                                                    | Purpose                                         |
+| -------------------------------------------------------------------------- | ----------------------------------------------- |
+| [@bili-agent-kit/core](https://www.npmjs.com/package/@bili-agent-kit/core) | SDK for TypeScript / JavaScript applications    |
+| [@bili-agent-kit/cli](https://www.npmjs.com/package/@bili-agent-kit/cli)   | Terminal and script access, login and approvals |
+| [@bili-agent-kit/mcp](https://www.npmjs.com/package/@bili-agent-kit/mcp)   | Connect AI assistants through stdio MCP         |
 
 Create `config.local.json` for both CLI and MCP:
 
@@ -46,38 +46,35 @@ Create `config.local.json` for both CLI and MCP:
 }
 ```
 
-Paths in the config are relative to its directory. Writes are disabled by default; public content can be read anonymously when the credential file does not yet exist. See [examples/config.json](examples/config.json) for a full example.
+Paths are relative to the config file's directory. You can read public content without logging in. Actions such as liking or sending messages are disabled by default. See [examples/config.json](examples/config.json) for more options.
 
-Read a video's metadata:
+### Command line
+
+List the available commands, then try reading a video's metadata:
 
 ```sh
+npx --yes @bili-agent-kit/cli@0.2.0 help
 npx --yes @bili-agent-kit/cli@0.2.0 --config config.local.json video '{"bvid":"BV1xx411c7mD"}'
 ```
 
-The CLI writes JSON only to stdout. Every response includes `version: 1` and `ok`; errors include a typed code and a nonzero exit status. Pass `-` to read JSON from stdin.
+The CLI returns JSON for use in scripts.
 
 ### QR login
 
-The example config includes `credentialsFile`. Run these commands in a terminal you control:
+To read account content or interact with others, first log in from your terminal:
 
 ```sh
 npx --yes @bili-agent-kit/cli@0.2.0 --config config.local.json auth.login '{}'
 npx --yes @bili-agent-kit/cli@0.2.0 --config config.local.json auth.status '{}'
 ```
 
-Scan the QR printed to stderr with the Bilibili app and confirm on your phone. Use `'{"png":"login-qr.png"}'` to also create a PNG relative to the working directory; the path must not already exist. Login waits at most 3 minutes for scanning; Ctrl+C cancels. Failure preserves previous credentials.
+Scan the QR code with the Bilibili app and confirm on your phone. Credentials are saved to `credentials.local.json`. The CLI and MCP server share the login when they use the same config.
 
-The file is plaintext with restricted permissions and is replaced only after account verification. Logout removes only local credentials, preserving state and other devices' sessions. Login does not enable writes or clear platform backoff/manual pauses. An existing MCP process reads the shared credential file on its next operation.
-
-Run this only when you want to log out:
-
-```sh
-npx --yes @bili-agent-kit/cli@0.2.0 --config config.local.json auth.logout '{}'
-```
+See the [login guide](docs/usage.md#扫码登录与刷新) to save the QR code as an image, refresh cookies or log out.
 
 ### Connect over MCP
 
-Configure your AI assistant to run the npm package, replacing the config path with an actual absolute path. For authenticated access, first use the CLI commands above to log in with the same config:
+Add this to your AI assistant's MCP configuration and replace the config path with an absolute path on your computer. If login is needed, run the QR login command above first:
 
 ```json
 {
@@ -90,7 +87,7 @@ Configure your AI assistant to run the npm package, replacing the config path wi
 }
 ```
 
-Windows paths can use `D:/bilibili/config.local.json`. MCP and CLI `help` derive their complete operation lists from the same registry. Approval, policy changes, credential administration and account recovery are not exposed.
+On Windows, paths can use `D:/bilibili/config.local.json`.
 
 ### Use the SDK
 
@@ -110,33 +107,15 @@ const video = await kit.reads.video({ bvid: "BV1xx411c7mD" });
 console.log(video.title);
 ```
 
-To reuse CLI/MCP configuration and login state, import `loadKit` from the same package and use `const kit = await loadKit("./config.local.json")`. Use `MemoryStore` for temporary reads. Sending requires saved drafts and execution records, so use `FileStore` or another persistent store. See the [usage reference](docs/usage.md) for the full API and configuration.
+To share CLI/MCP configuration and login state, import `loadKit` from the same package and call `await loadKit("./config.local.json")`. See the [usage reference](docs/usage.md) for the full API.
 
-## Approvals and data
+## Interactions, publishing and account data
 
-Sending starts with a saved draft. An administrator checks its content and digest before approving execution. A send request cannot be reused with different content. If the result is unclear, execution stops until someone checks what happened. DMs also require a trusted recipient and mutual following.
+Likes, replies, posts and submissions are disabled by default. Configure the allowed actions and targets before using them. Each action starts with a draft that you review and approve through the CLI or SDK. If the result is unclear, execution stops until you check what happened. DMs also require a trusted recipient and mutual following.
 
-Cookies come from your configuration or SDK credential provider; the toolkit does not search your browser for them. Drafts and pending DMs are stored separately from cookies. Requests to subtitle CDNs do not include account cookies.
+Login credentials are saved as plaintext in the local file you specify; the toolkit does not extract cookies from your browser. Drafts, message progress and upload records are saved in `stateDir`, separate from account credentials. Keep these files out of repositories and do not share them.
 
-**MCP approval rules cannot stop an AI from running administrator commands through a terminal.** Restrict its access to those commands, credentials and state files separately. See [security and recovery](SECURITY.md) for permissions, rate limits and recovery steps.
-
-## Development and verification
-
-Source development requires pnpm **12.15.0**:
-
-```sh
-git clone https://github.com/Cansiny0320/bili-agent-kit.git
-cd bili-agent-kit
-pnpm install --frozen-lockfile
-pnpm check
-pnpm test
-pnpm build
-pnpm smoke
-```
-
-After building, run `node packages/cli/dist/main.mjs help` to use the local CLI. Read and login operations still require an explicit config file.
-
-`pnpm fmt` changes formatting. Tests use simulated network responses; set `BILI_TEST_FFMPEG` for real local decoding tests. `smoke` packages and installs all three packages, then checks the SDK, CLI and MCP server. The expanded APIs and writes have not completed live-account acceptance testing. Live chat tools read recent messages rather than listening continuously; your application must schedule repeated calls.
+MCP does not expose approval tools. **An AI that can run administrator commands or modify credentials and state files can bypass these restrictions.** Restrict that access separately; see [security and recovery](SECURITY.md) for details.
 
 ## License
 
@@ -144,7 +123,7 @@ After building, run `node packages/cli/dist/main.mjs help` to use the local CLI.
 
 ## Sponsorship
 
-If this project is useful to you, you can support its continued development via WeChat Pay or Alipay. Thank you!
+If this project is useful to you, you can support its continued development via WeChat Pay or Alipay.
 
 ![Support via WeChat Pay or Alipay](.github/sponsorship/sponsorship-cats.png)
 
