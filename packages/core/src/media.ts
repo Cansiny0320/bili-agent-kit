@@ -1,7 +1,8 @@
 import { upstreamText } from "./models.js";
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { join, extname } from "node:path";
-import { spawn } from "node:child_process";
+import { ffmpeg } from "./media-process.js";
+export { ffmpeg } from "./media-process.js";
 import { z } from "zod";
 import { id, parse } from "./contracts.js";
 import { LIVE, BiliClient } from "./client.js";
@@ -9,14 +10,18 @@ import { KitError } from "./errors.js";
 import { object } from "./traffic.js";
 import { referenceInput, resolveVideo } from "./references.js";
 import { ContentReads } from "./reads.js";
-import { sampleFrames, type FrameOptions } from "./frames.js";
+import { sampleFrames, frameTimingFields, frameRequests, type FrameOptions } from "./frames.js";
+import { timeRange, timeRangeFields } from "./timeline.js";
 import { imageType, localFile } from "./files.js";
+import { asrConfig, asrInput, transcribe, type AsrOptions } from "./asr.js";
 
 export interface MediaOptions extends FrameOptions {
+  asr?: AsrOptions | undefined;
   maxBytes?: number;
   timeoutMs?: number;
 }
 export const mediaConfig = z.strictObject({
+  asr: asrConfig.optional(),
   mediaRoot: z.string().min(1),
   outputRoot: z.string().min(1),
   ffmpegPath: z.string().min(1),
@@ -29,6 +34,7 @@ export const mediaConfig = z.strictObject({
   timeoutMs: z.number().int().min(1000).max(300000).default(120000),
 });
 export const mediaInputs = {
+  asr_transcribe: asrInput,
   media_download: referenceInput.extend({
     kind: z.enum(["video", "audio"]).default("video"),
     quality: z.number().int().min(16).max(127).default(80),
@@ -39,17 +45,18 @@ export const mediaInputs = {
     durationSeconds: z.number().positive().max(3600).default(60),
   }),
   online_frames: referenceInput.extend({
-    count: z.number().int().min(1).max(12).default(6),
-    intervalSeconds: z.number().min(1).max(600).default(10),
+    ...frameTimingFields,
     contactSheet: z.boolean().default(false),
   }),
   subtitle_export: referenceInput.extend({
+    ...timeRangeFields,
     language: z.string().max(30).optional(),
     format: z.enum(["json", "text", "srt", "vtt"]).default("srt"),
   }),
   article_export: z.strictObject({ cvid: id }),
   live_frame: z.strictObject({ roomId: id }),
   materials: referenceInput.extend({
+    ...frameTimingFields,
     comments: z.boolean().default(true),
     subtitles: z.boolean().default(true),
     frames: z.boolean().default(false),
@@ -109,25 +116,6 @@ export async function mediaImages(root: string, files: string[]): Promise<MediaI
     images.push({ type: "image", mimeType: imageType(bytes), data: bytes.toString("base64") });
   }
   return images;
-}
-export function ffmpeg(options: MediaOptions, args: string[]): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(
-      options.ffmpegPath,
-      ["-nostdin", "-v", "error", "-n", "-threads", "2", ...args],
-      {
-        shell: false,
-        windowsHide: true,
-        stdio: "ignore",
-        timeout: options.timeoutMs ?? 120000,
-        killSignal: "SIGKILL",
-      },
-    );
-    child.once("error", () => reject(new KitError("UNAVAILABLE", "ffmpeg could not run.")));
-    child.once("exit", (code) =>
-      code === 0 ? resolve() : reject(new KitError("UNAVAILABLE", "ffmpeg failed or timed out.")),
-    );
-  });
 }
 const inputFile = (file: string, format = "mov") => [
   "-protocol_whitelist",
@@ -250,6 +238,41 @@ export class Media {
   }
   async call<K extends MediaName>(name: K, input: MediaArguments<K>): Promise<unknown> {
     const a = parse(mediaInputs[name], input) as Record<string, unknown>;
+    if (name === "asr_transcribe") {
+      const options = this.config();
+      if (!options.asr)
+        throw new KitError("FORBIDDEN", "ASR requires host whisper.cpp and model configuration.");
+      if (typeof a.reference === "string") {
+        const audio = await this.download({
+          reference: String(a.reference),
+          kind: "audio",
+          ...(a.page ? { page: Number(a.page) } : {}),
+        });
+        const { reference: _reference, page: _page, ...local } = a;
+        return {
+          ...(await transcribe({ ...options, mediaRoot: options.outputRoot }, options.asr, {
+            ...local,
+            file: audio.file,
+          })),
+          bvid: audio.bvid,
+          cid: audio.cid,
+        };
+      }
+      return transcribe(options, options.asr, a);
+    }
+    const range = {
+      ...(a.startSeconds !== undefined ? { startSeconds: Number(a.startSeconds) } : {}),
+      ...(a.endSeconds !== undefined ? { endSeconds: Number(a.endSeconds) } : {}),
+    };
+    if (["online_frames", "materials", "subtitle_export"].includes(name)) timeRange(range);
+    const frameArgs = {
+      ...range,
+      ...(a.timestampsSeconds ? { timestampsSeconds: a.timestampsSeconds as number[] } : {}),
+      ...(a.count !== undefined ? { count: Number(a.count) } : {}),
+      ...(a.intervalSeconds !== undefined ? { intervalSeconds: Number(a.intervalSeconds) } : {}),
+    };
+    if (["online_frames", "materials"].includes(name))
+      frameRequests({ file: "pending", ...frameArgs });
     if (name === "media_download") return this.download(a as MediaArguments<"media_download">);
     if (name === "materials") {
       const reference = {
@@ -266,11 +289,11 @@ export class Media {
       material.metadata = await this.client.video({ bvid: video.bvid });
       for (const [key, enabled, run] of [
         ["comments", a.comments, () => this.client.comments({ oid: video.aid })],
-        ["subtitles", a.subtitles, () => this.reads.call("transcript", reference)],
+        ["subtitles", a.subtitles, () => this.reads.call("transcript", { ...reference, ...range })],
         [
           "frames",
           a.frames,
-          () => this.call("online_frames", { ...reference, count: 6, contactSheet: true }),
+          () => this.call("online_frames", { ...reference, ...frameArgs, contactSheet: true }),
         ],
       ] as const)
         if (enabled) {
@@ -295,7 +318,7 @@ export class Media {
       });
       const frames = await sampleFrames(
         { ...options, mediaRoot: options.outputRoot },
-        { file: video.file, count: Number(a.count), intervalSeconds: Number(a.intervalSeconds) },
+        { file: video.file, ...frameArgs },
       );
       let files = frames.files;
       if (a.contactSheet) {
@@ -321,6 +344,7 @@ export class Media {
         ...video,
         files,
         intervalSeconds: a.intervalSeconds,
+        ...(frames.timestampsSeconds ? { timestampsSeconds: frames.timestampsSeconds } : {}),
         images: await mediaImages(options.outputRoot, files),
       };
     }

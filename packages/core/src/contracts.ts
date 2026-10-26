@@ -89,13 +89,25 @@ export function targetOf(action: WriteAction): string {
   if (action.kind === "dm.send") return `dm:${action.uid}`;
   if (action.kind === "live.send") return `live:${action.roomId}`;
   if ("oid" in action) return `comment:${action.oid}`;
-  if (action.kind === "favorite.add" || action.kind === "favorite.remove")
-    return `favorite:${action.folderId}`;
+  if ("folderId" in action) return `favorite:${action.folderId}`;
+  if (action.kind === "favorite.folder_create") return `account:${action.uid}`;
+  if (action.kind === "watch_later.batch_add") return `video:${action.aids[0]}`;
   if ("aid" in action) return `video:${action.aid}`;
   if ("dynamicId" in action) return `dynamic:${action.dynamicId}`;
   if (action.kind === "dynamic.create") return `account:${action.uid}`;
   if ("uid" in action) return `user:${action.uid}`;
   throw new KitError("INVALID_INPUT", "Unsupported action target.");
+}
+export function targetsOf(action: WriteAction): string[] {
+  return [
+    ...new Set([
+      targetOf(action),
+      ...("sourceFolderId" in action ? [`favorite:${action.sourceFolderId}`] : []),
+      ...(action.kind === "watch_later.batch_add" || action.kind === "watch_later.move"
+        ? action.aids.map((aid) => `video:${aid}`)
+        : []),
+    ]),
+  ];
 }
 export const messageSchema = z.object({
   ts: z.number().finite().nonnegative(),
@@ -131,6 +143,8 @@ const counterSchema = z.object({
   readDay: z.number(),
   writeHour: z.number(),
   writeDay: z.number(),
+  serviceHour: z.number().default(0),
+  serviceDay: z.number().default(0),
   lastWrite: z.number(),
   lastWriteGroup: z.string().optional(),
 });
@@ -142,7 +156,23 @@ export const cursorSchema = z.object({
 });
 export type Cursor = z.infer<typeof cursorSchema>;
 export const stateSchema = z.object({
-  version: z.union([z.literal(1), z.literal(2)]).transform(() => 2 as const),
+  version: z.union([z.literal(1), z.literal(2), z.literal(3)]).transform(() => 3 as const),
+  openEvents: z
+    .record(
+      z.string(),
+      z.object({
+        seen: z.array(z.string()),
+        pending: z.array(
+          z.object({
+            receipt: z.string().uuid(),
+            key: z.string(),
+            event: z.unknown(),
+            receivedAt: z.number(),
+          }),
+        ),
+      }),
+    )
+    .default({}),
   identities: z.record(z.string(), id).default({}),
   sequence: z.number().int().nonnegative(),
   drafts: z.record(z.string(), draftSchema),

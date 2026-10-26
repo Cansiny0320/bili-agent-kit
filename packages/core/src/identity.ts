@@ -48,6 +48,8 @@ export async function bindIdentity(
             readDay: current.readDay + legacy.readDay,
             writeHour: current.writeHour + legacy.writeHour,
             writeDay: current.writeDay + legacy.writeDay,
+            serviceHour: current.serviceHour + legacy.serviceHour,
+            serviceDay: current.serviceDay + legacy.serviceDay,
             lastWrite: Math.max(current.lastWrite, legacy.lastWrite),
           }
         : legacy;

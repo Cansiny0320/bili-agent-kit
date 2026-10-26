@@ -17,7 +17,7 @@ const auth = await loadAuth("./config.local.json");
 const status = await auth.status();
 ```
 
-Use `loadKit(configPath)` to share the configured credentials with CLI/MCP. `QrLogin` supports custom login UIs; its success result contains credentials and must remain inside the trusted host. `FileAuth` returns only sanitized account information and supports explicit `refreshCheck()` / `refresh()`. Expanded APIs include `kit.reads.popular`, `kit.reads.transcript`, `kit.media.call`, `kit.events.peek/ack` and `kit.open.call`. Open-platform access requires separate application credentials and scopes.
+Use `loadKit(configPath)` to share the configured credentials with CLI/MCP. `QrLogin` supports custom login UIs; its success result contains credentials and must remain inside the trusted host. `FileAuth` returns only sanitized account information and supports explicit `refreshCheck()` / `refresh()`. Expanded APIs include `kit.reads.collections`, `kit.reads.transcript`, `kit.media.call` (including local ASR), `kit.events.peek/ack` and `kit.open.call`. Trusted hosts use `loadOpenAuth`, `kit.openEvents.receiveWebhook` and `kit.openLive.run`; model tools only consume the official event queue. Open-platform access requires separate application credentials and scopes. See the [extended capability guide](https://github.com/Cansiny0320/bili-agent-kit/blob/main/docs/agent-capabilities.md).
 
 Writes are disabled by default and require allowlists, durable state and administrator approval. This library is not a shell sandbox. See [configuration and API usage](https://github.com/Cansiny0320/bili-agent-kit/blob/main/docs/usage.md) and [security/recovery](https://github.com/Cansiny0320/bili-agent-kit/blob/main/SECURITY.md).
 

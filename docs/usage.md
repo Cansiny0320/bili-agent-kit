@@ -1,6 +1,8 @@
 # 使用说明
 
-本页对应 `0.2.1`。CLI、MCP 和 SDK 共用 core 的操作定义。`help` / `list` 返回完整输入 schema，MCP 工具名为 CLI 名称加 `bili_` 前缀。所有 ID 使用字符串，页码和数量使用数字。
+本页对应 `0.3.0`。CLI、MCP 和 SDK 共用 core 的操作定义。`help` / `list` 返回完整输入 schema，MCP 工具名为 CLI 名称加 `bili_` 前缀。所有 ID 使用字符串，页码和数量使用数字。
+
+新增的合集、收藏管理、时间素材、ASR、增量事件和官方授权/推送见 [能力扩展说明](agent-capabilities.md)。
 
 ## 配置
 
@@ -181,7 +183,7 @@ SDK 使用 `kit.media.call(name,input)`，下载也可直接调用 `kit.media.do
 
 ## 官方开放平台
 
-视频稿件和文章稿件使用独立应用授权，扫码 Cookie 不能代替。当前实现读取既有应用凭据，不代办应用注册或 OAuth 授权。配置片段：
+视频稿件和文章稿件使用独立应用授权，扫码 Cookie 不能代替。支持独立应用凭据和显式 OAuth 授权码交换/刷新，不代办应用注册；详见 [能力扩展说明](agent-capabilities.md#官方-oauth数据和推送)。配置片段：
 
 ```json
 {
@@ -216,7 +218,7 @@ SDK 使用 `kit.media.call(name,input)`，下载也可直接调用 `kit.media.do
 
 ## 状态升级与恢复
 
-state v1 首次写入前备份为 `state.v1.backup.json`，保留原草稿、身份映射、预算和游标后迁移到 v2。旧程序会拒绝 v2。回滚前停止共享该状态的全部进程，备份最新状态；发生新写入后，不能直接覆盖为升级前备份，否则会丢失去重记录并有重复发送风险。
+state v1/v2 首次事务前备份为对应的 `state.v1.backup.json` 或 `state.v2.backup.json`，保留原草稿、身份映射、预算和游标后迁移到 v3。升级前停止共享该目录的旧进程；旧程序会拒绝 v3。回滚前停止共享该状态的全部进程，备份最新状态；发生新写入后，不能直接覆盖为升级前备份，否则会丢失去重记录并有重复发送风险。
 
 首次使用新会话会验证 `/x/web-interface/nav`，将会话指纹绑定到 UID。相同账号重新登录或刷新保留预算、暂停状态和游标；旧草稿继续绑定原会话。未验证过且已失效的旧会话不能猜测归属，身份或游标冲突会停止迁移，需保留文件供管理员核查。
 
@@ -247,11 +249,11 @@ pnpm smoke
 
 构建后可用 `node packages/cli/dist/main.mjs help` 调用本地 CLI；读取或登录时仍需显式传入配置文件。
 
-`pnpm fmt` 会修改格式。测试使用模拟网络；`pnpm smoke` 会打包并安装三个包，检查 SDK、CLI 和 MCP 是否能正常使用。可通过 `BILI_TEST_FFMPEG` 指定本地 ffmpeg 运行真实媒体解码测试。新增接口与写操作未完成真实账号验收。
+`pnpm fmt` 会修改格式。测试使用模拟网络；`pnpm smoke` 会打包并安装三个包，检查 SDK、CLI 和 MCP 是否能正常使用。可通过 `BILI_TEST_FFMPEG` 指定本地 ffmpeg 运行真实媒体解码测试。真实账号、媒体与官方应用能力的验证范围见 [验收记录](verification.md)。
 
 `packages/core` owns all behavior and schemas; `packages/cli` and `packages/mcp` adapt them. Build output is ESM (`.mjs`) with TypeScript declarations (`.d.mts`). Vite+ uses its own version number for the bundled Vite API; the targeted pnpm peer rules acknowledge that alias. TypeScript 7.0.2 is stable, while Vite+'s declaration emitter currently warns that its TypeScript 7 integration is experimental; declaration files and package exports are checked by `pnpm smoke`.
 
-本页示例使用 `pnpm build` 后的本地 CLI；使用 npm 包时，将 `node packages/cli/dist/main.mjs` 替换为 `npx --yes @bili-agent-kit/cli@0.2.1`，其他参数保持不变。
+本页示例使用 `pnpm build` 后的本地 CLI；使用 npm 包时，将 `node packages/cli/dist/main.mjs` 替换为 `npx --yes @bili-agent-kit/cli@latest`，其他参数保持不变。
 
 For local package verification, `pnpm --filter @bili-agent-kit/core pack --pack-destination ./artifacts` creates a package archive. When testing unpublished CLI/MCP changes, also supply the core tarball and a package-manager override resolving `@bili-agent-kit/core` to that local archive; otherwise the dependency would resolve from npm. `scripts/smoke.mjs` demonstrates the complete isolated installation. These development checks do not publish to npm; automatic releases are described below.
 
@@ -273,9 +275,9 @@ GitHub 的 `npm` environment 仅允许 `v*` tag 部署。工作流发布阶段�
 后续发版时，同步更新根目录与三个包的 `version`、安装示例和 `CHANGELOG.md`，完成检查并提交，推送相同版本 tag，例如：
 
 ```sh
-node scripts/release.mjs check v0.2.1
-git tag -a v0.2.1 -m 'Release v0.2.1'
-git push origin main v0.2.1
+node scripts/release.mjs check v0.3.0
+git tag -a v0.3.0 -m 'Release v0.3.0'
+git push origin main v0.3.0
 ```
 
 示例版本仅用于说明，已发布版本不能复用。`scripts/release.mjs check` 是本地校验；`publish` 模式只允许对应 GitHub 仓库的 tag/OIDC 环境运行。

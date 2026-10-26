@@ -1,6 +1,6 @@
 {
   "name": "@bili-agent-kit/core",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Harness-independent Bilibili SDK with persistent safety controls",
   "homepage": "https://github.com/Cansiny0320/bili-agent-kit#readme",
   "bugs": {

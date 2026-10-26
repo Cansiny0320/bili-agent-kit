@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { libraryActions } from "./library-actions.js";
 
 const id = z.string().regex(/^[1-9]\d{0,19}$/);
 export const attachmentSchema = z.strictObject({
@@ -11,6 +12,9 @@ export const attachmentSchema = z.strictObject({
 const text = z.string().trim().min(1).max(2000);
 const images = z.array(attachmentSchema).max(9).default([]);
 export const extendedActions = [
+  ...libraryActions,
+  z.strictObject({ kind: z.literal("watch_later.add"), aid: id }),
+  z.strictObject({ kind: z.literal("watch_later.remove"), aid: id }),
   z.strictObject({ kind: z.literal("video.like"), aid: id, enabled: z.boolean().default(true) }),
   z.strictObject({
     kind: z.literal("video.coin"),

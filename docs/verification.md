@@ -1,5 +1,31 @@
 # Verification record
 
+## 能力扩展验收（2026-10-26）
+
+原八项能力和后续批准的收藏管理扩展均已接入本地代码，普通操作共用 SDK、CLI、MCP 合同；OAuth 管理、Webhook 接收和直播连接由可信宿主调用。本节记录 v0.3.0 的本地验收；发布是否成功和远端 CI 结果应以对应 tag 的 Release workflow 为准。
+
+- **真实读取**：匿名合集、系列元数据和分页、UP 投稿成功；已登录稍后再看 v2 列表与收藏搜索成功。搜索出现 `count: 0` 但 `medias` 非空，保留原始字段，不据 count 丢弃内容。稍后再看真实样本仅两条一页，其他 `sortField` 值和多页行为仅完成参数/游标测试。
+- **真实写入及回读**：用两个本次创建的私密收藏夹和两条测试视频，验证稍后再看单条添加/移除、V3 批量添加、移入收藏，收藏夹创建/编辑、跨夹复制/移动和相邻插入排序。排序前后顺序实际改变。批量添加使用 `/x/v3/fav/toview/adds` 的 `aid:2` 编码；向旧单条添加接口传 resources 被拒绝，不采用该方案。
+- **清理**：两个测试夹均已删除并回读确认不存在，稍后再看恢复测试前空列表；没有调整既有收藏内容。验证复用共享登录流量状态并遵守退避和预算，没有通过新状态绕过限制。真实请求沿用原 v2 状态处理器，共享登录状态尚未迁移。
+- **真实本地媒体**：FFmpeg 9.0.2、whisper.cpp 1.9.5 和 base 多语言模型安装成功；红/蓝视频的指定时间点与范围抽帧、越界拒绝、音频转换、中文语音转写和中间文件清理通过。
+- **模拟与回归**：覆盖完整有界增量扫描、旧视频新入合集、pending/ack、v1/v2 → v3 迁移备份、全部目标权限、双方归属、编辑快照冲突、批量部分成功，以及发送成功但回读失败时保持 unknown 并禁止重发。
+- **尚未真实联调**：OAuth 交换/刷新、ARC_DATA、投稿 Webhook 和官方直播已按文档实现并通过模拟测试，覆盖一次性 state/refresh token、原文验签、去重队列、WS 鉴权/解压/心跳/重连。当前没有开放平台应用授权，不能据此宣称官方链路已端到端可用；Cookie 登录不能替代该授权。
+
+Node 24.19.0 下最终 32 个测试文件、119 项测试全部通过，无跳过；格式、lint 和 TypeScript 检查通过。三个包构建以及独立 tarball 安装、SDK/CLI/MCP 导出、消费方类型检查、CLI JSON/退出码和实际 MCP stdio 检查通过。构建器仍有既有的 TypeScript 7 experimental 提示。
+
+本机已有 pnpm 12.15.0 自动切换会报 ENOEXEC，因此使用可用 pnpm 10.28.0 执行等价步骤，未修改 packageManager 声明。验证命令（先将 Node 24 加入 PATH）：
+
+```sh
+node_modules/.bin/vp check
+node_modules/.bin/tsc --noEmit
+# 启用真实媒体测试时设置 BILI_TEST_FFMPEG、BILI_TEST_WHISPER、BILI_TEST_ASR_MODEL、BILI_TEST_ASR_AUDIO。
+node_modules/.bin/vp test run
+npm_config_manage_package_manager_versions=false pnpm -r build
+node scripts/licenses.mjs
+# npm_execpath 指向可用的 pnpm 可执行文件。
+npm_config_manage_package_manager_versions=false npm_execpath=/path/to/pnpm node scripts/smoke.mjs
+```
+
 ## 真实账号复测与修复（2026-10-26）
 
 `v0.2.1` 的修复使用已有登录和共享请求状态完成本地验证。

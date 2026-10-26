@@ -51,7 +51,7 @@ await writeFile(
   join(work, "verify.mjs"),
   `
 import assert from 'node:assert/strict';
-import {BiliKit,MemoryStore,invoke,QrLogin,FileCredentials,loadAuth} from '@bili-agent-kit/core';
+import {BiliKit,MemoryStore,invoke,QrLogin,FileCredentials,loadAuth,loadOpenAuth,describeOperations} from '@bili-agent-kit/core';
 import {runCli} from '@bili-agent-kit/cli';
 import {createMcpServer} from '@bili-agent-kit/mcp';
 const kit = new BiliKit({store:new MemoryStore()});
@@ -65,6 +65,10 @@ assert.equal(typeof kit.reads.popular,'function');
 assert.equal(typeof kit.media.download,'function');
 assert.equal(typeof kit.events.peek,'function');
 assert.equal(typeof kit.open.call,'function');
+assert.equal(typeof loadOpenAuth,'function');
+assert.equal(typeof kit.openEvents.receiveWebhook,'function');
+assert.equal(typeof kit.openLive.run,'function');
+for (const name of ['collections','watch_later_page','favorite_search','asr_transcribe','open_video_stats','open_events_poll']) assert.ok(describeOperations()[name]);
 await createMcpServer(kit).close();
 console.log('Packed SDK/CLI/MCP exports passed');
 `,
@@ -86,6 +90,9 @@ kit.writes.preview(interaction); kit.writes.preview(publish);
 void kit.reads.popular({page:1});
 void kit.media.call('online_frames',{reference:'BV1xx411c7mD',contactSheet:true});
 void kit.open.call('open_article_list',{page:1});
+void kit.reads.collection_videos({uid:'1',seasonId:'2'});
+void kit.media.call('asr_transcribe',{file:'/media/audio.wav',language:'zh'});
+kit.writes.preview({kind:'favorite.move',sourceFolderId:'1',folderId:'2',aids:['42']});
 // @ts-expect-error New SDK inputs must retain their declared types.
 kit.reads.popular({page:'wrong'});
 void video; void runCli; void createMcpServer;

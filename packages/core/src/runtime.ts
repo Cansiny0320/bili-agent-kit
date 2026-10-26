@@ -1,7 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { z } from "zod";
-import { parse, policySchema } from "./contracts.js";
+import { parse, policySchema, systemClock } from "./contracts.js";
 import { FileCredentials } from "./credentials.js";
 import { FileAuth } from "./auth-runtime.js";
 import { QrLogin } from "./auth.js";
@@ -10,6 +10,8 @@ import { FileStore } from "./state.js";
 import { openCredentialSchema } from "./open-platform.js";
 import { mediaConfig } from "./media.js";
 import { BiliKit } from "./kit.js";
+import { OpenAuth } from "./open-auth.js";
+import { Traffic } from "./traffic.js";
 
 export const configSchema = z.strictObject({
   version: z.literal(1),
@@ -78,6 +80,9 @@ export async function loadKit(configPath: string): Promise<BiliKit> {
             ...config.media,
             mediaRoot: resolve(base, config.media.mediaRoot),
             outputRoot: resolve(base, config.media.outputRoot),
+            ...(config.media.asr
+              ? { asr: { ...config.media.asr, model: resolve(base, config.media.asr.model) } }
+              : {}),
           },
         }
       : {}),
@@ -115,4 +120,31 @@ export async function loadAuth(configPath: string, protocol = new QrLogin()): Pr
       "Credentials must use a separate file from config and state.",
     );
   return new FileAuth(new FileCredentials(credentialPath), new FileStore(stateDir), protocol);
+}
+export async function loadOpenAuth(configPath: string): Promise<OpenAuth> {
+  const absolute = resolve(configPath),
+    base = dirname(absolute),
+    config = parse(configSchema, await readJson(absolute));
+  if (!config.openPlatform)
+    throw new KitError("AUTH_REQUIRED", "Configure openPlatform.credentialsFile first.");
+  const file = resolve(base, config.openPlatform.credentialsFile);
+  const reserved = [
+    absolute,
+    resolve(base, config.stateDir, "state.json"),
+    resolve(base, config.stateDir, "state.json.lock"),
+    ...(config.credentialsFile ? [resolve(base, config.credentialsFile)] : []),
+  ];
+  if (
+    reserved.some((path) =>
+      process.platform === "win32" ? path.toLowerCase() === file.toLowerCase() : path === file,
+    )
+  )
+    throw new KitError(
+      "INVALID_INPUT",
+      "OAuth credentials must be separate from Cookie credentials, configuration and state.",
+    );
+  return new OpenAuth(
+    file,
+    new Traffic(new FileStore(resolve(base, config.stateDir)), systemClock, globalThis.fetch),
+  );
 }

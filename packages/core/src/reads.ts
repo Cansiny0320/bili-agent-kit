@@ -1,4 +1,6 @@
 import { creatorMetrics } from "./creator.js";
+import { collectionInputs, readCollection, type CollectionName } from "./collections.js";
+import { clipSubtitles, timeRange, timeRangeFields } from "./timeline.js";
 import { z } from "zod";
 import { BiliClient, API, LIVE, scrub } from "./client.js";
 import { id, bvid, parse } from "./contracts.js";
@@ -11,6 +13,7 @@ const page = z.number().int().min(1).max(1000).default(1);
 const size = z.number().int().min(1).max(50).default(20);
 const cursor = z.string().max(300).default("");
 export const readInputs = {
+  ...collectionInputs,
   creator_metrics: z.strictObject({ bvid: bvid.optional() }),
   popular: z.strictObject({ page, size }),
   ranking: z.strictObject({ rid: z.number().int().min(0).default(0) }),
@@ -46,6 +49,24 @@ export const readInputs = {
     business: z.string().max(30).default(""),
   }),
   watch_later: z.strictObject({}),
+  watch_later_page: z.strictObject({
+    startKey: cursor,
+    splitKey: cursor,
+    ascending: z.boolean().default(false),
+    sortField: z.number().int().min(0).max(2).default(0),
+  }),
+  favorite_search: z.strictObject({
+    keyword: z.string().trim().min(1).max(200),
+    folderId: id.optional(),
+    startOid: z
+      .string()
+      .regex(/^\d{1,20}$/)
+      .default("0"),
+    startType: z.number().int().min(0).max(30).default(0),
+    searchCount: z.number().int().min(0).max(10000).default(0),
+    page,
+    size,
+  }),
   related: z.strictObject({ bvid }),
   tags: z.strictObject({ bvid }),
   dynamic_feed: z.strictObject({ offset: cursor, type: z.enum(["all", "video"]).default("all") }),
@@ -68,6 +89,7 @@ export const readInputs = {
   }),
   resolve: referenceInput,
   transcript: referenceInput.extend({
+    ...timeRangeFields,
     language: z.string().max(30).optional(),
     format: z.enum(["json", "text", "srt", "vtt"]).default("json"),
   }),
@@ -89,10 +111,20 @@ export function readMethods(content: ContentReads): ReadMethods {
 export class ContentReads {
   constructor(readonly client: BiliClient) {}
   async call<K extends ReadName>(name: K, input: ReadArguments<K>): Promise<unknown> {
+    if (Object.hasOwn(collectionInputs, name))
+      return readCollection(this.client, name as CollectionName, input);
     const a = parse(readInputs[name], input) as Record<string, string | number | undefined>;
     if (name === "resolve") return resolveVideo(this.client, input as ReadArguments<"resolve">);
     const session = await this.client.session(
-      ["history", "watch_later", "dynamic_feed", "notifications", "transcript"].includes(name),
+      [
+        "history",
+        "watch_later",
+        "watch_later_page",
+        "favorite_search",
+        "dynamic_feed",
+        "notifications",
+        "transcript",
+      ].includes(name),
     );
     const get = async (
       path: string,
@@ -153,6 +185,23 @@ export class ContentReads {
         });
       case "watch_later":
         return get("/x/v2/history/toview");
+      case "watch_later_page":
+        return get("/x/v2/history/toview/v2/list", {
+          start_key: String(a.startKey),
+          split_key: String(a.splitKey),
+          asc: String(a.ascending),
+          sort_field: Number(a.sortField),
+        });
+      case "favorite_search":
+        return get("/x/v3/fav/tab/fav/search", {
+          keyword: String(a.keyword),
+          start_oid: String(a.startOid),
+          start_otype: Number(a.startType),
+          search_count: Number(a.searchCount),
+          pn,
+          count: ps,
+          ...(a.folderId ? { media_id: String(a.folderId) } : {}),
+        });
       case "related":
         return get("/x/web-interface/archive/related", { bvid: String(a.bvid) });
       case "tags":
@@ -228,6 +277,11 @@ export class ContentReads {
         return { status: "incomplete", pagesRead: Number(a.maxPages) };
       }
       case "transcript": {
+        const range = {
+          startSeconds: a.startSeconds as number | undefined,
+          endSeconds: a.endSeconds as number | undefined,
+        };
+        timeRange(range);
         const video = await resolveVideo(this.client, {
           reference: String(a.reference),
           ...(a.page !== undefined ? { page: Number(a.page) } : {}),
@@ -237,13 +291,13 @@ export class ContentReads {
           cid: video.cid,
           ...(a.language ? { language: String(a.language) } : {}),
         });
+        const body = clipSubtitles(subtitles.body, range);
         return {
           ...video,
           ...subtitles,
+          body,
           format: a.format,
-          ...(a.format !== "json"
-            ? { text: formatSubtitles(subtitles.body, String(a.format)) }
-            : {}),
+          ...(a.format !== "json" ? { text: formatSubtitles(body, String(a.format)) } : {}),
         };
       }
       case "video_danmaku": {

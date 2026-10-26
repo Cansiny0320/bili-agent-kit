@@ -9,6 +9,8 @@ export const RISK_DEFAULTS = {
   readDaily: 3000,
   writeHourly: 12,
   writeDaily: 30,
+  serviceHourly: 600,
+  serviceDaily: 10000,
   dmGapMs: 60000,
 } as const;
 export function checkPaused(state: State, account: string, now: number): void {
@@ -72,6 +74,16 @@ export class Traffic {
     bodyOptions?: { format?: "bytes" | "text" | "location"; limit?: number; writeGroup?: string },
   ): Promise<unknown> {
     const writing = init.method === "POST";
+    const service =
+      writing &&
+      ((url.origin === "https://api.bilibili.com" &&
+        ["/x/account-oauth2/v1/token", "/x/account-oauth2/v1/refresh_token"].includes(
+          url.pathname,
+        )) ||
+        (url.origin === "https://member.bilibili.com" &&
+          ["/arcopen/fn/live/room/ws-start", "/arcopen/fn/live/room/ws-heartbeat"].includes(
+            url.pathname,
+          )));
     const token = randomUUID();
     const deadline = this.clock.now() + 30000;
     for (;;) {
@@ -88,19 +100,31 @@ export class Traffic {
           readDay: 0,
           writeHour: 0,
           writeDay: 0,
+          serviceHour: 0,
+          serviceDay: 0,
           lastWrite: -1e12,
         });
         if (now - a.hourAt >= 3600000) {
           a.hourAt = now;
           a.readHour = 0;
           a.writeHour = 0;
+          a.serviceHour = 0;
         }
         if (now - a.dayAt >= 86400000) {
           a.dayAt = now;
           a.readDay = 0;
           a.writeDay = 0;
+          a.serviceDay = 0;
         }
-        if (writing) {
+        if (service) {
+          if (
+            a.serviceHour >= RISK_DEFAULTS.serviceHourly ||
+            a.serviceDay >= RISK_DEFAULTS.serviceDaily
+          )
+            throw new KitError("RATE_LIMITED", "Official service request budget reached.");
+          a.serviceHour++;
+          a.serviceDay++;
+        } else if (writing) {
           const gap = url.pathname.endsWith("/send_msg") ? RISK_DEFAULTS.dmGapMs : 0;
           const sameGroup =
             !!bodyOptions?.writeGroup && a.lastWriteGroup === bodyOptions.writeGroup;

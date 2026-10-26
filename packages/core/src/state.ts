@@ -12,7 +12,8 @@ export interface StateStore {
 }
 function emptyState(): State {
   return {
-    version: 2,
+    version: 3,
+    openEvents: {},
     identities: {},
     sequence: 0,
     drafts: {},
@@ -82,10 +83,11 @@ export class FileStore implements StateStore {
       const state = await this.#read();
       try {
         const old = await readFile(join(this.directory, "state.json"), "utf8");
-        if ((JSON.parse(old) as { version?: number }).version === 1) {
+        const version = (JSON.parse(old) as { version?: number }).version;
+        if (version === 1 || version === 2) {
           let backup;
           try {
-            backup = await open(join(this.directory, "state.v1.backup.json"), "wx", 0o600);
+            backup = await open(join(this.directory, `state.v${version}.backup.json`), "wx", 0o600);
           } catch (error) {
             if (!isCode(error, "EEXIST")) throw error;
           }

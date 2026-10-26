@@ -15,16 +15,17 @@ Choose an MCP server, command-line tool or TypeScript SDK to fit your setup.
 
 ## What can it do?
 
-- **Find content**: search videos and browse popular videos, rankings, creators' uploads, favorites, history, posts, articles, comments, danmaku and Bilibili AI summaries.
-- **Work with video and audio**: resolve BV/AV IDs, links and multipart videos; download video or audio, trim audio, extract frames, make contact sheets, and export subtitles and articles.
-- **Read messages**: fetch DMs, replies, mentions, like notifications, comments and recent live chat, with saved progress to reduce duplicate processing.
+- **Find content**: search videos and browse popular videos, rankings, creators' uploads, collections and series, favorites, history, posts, articles, comments, danmaku and Bilibili AI summaries.
+- **Work with video and audio**: resolve BV/AV IDs, links and multipart videos; download video or audio, trim audio, extract frames at selected timestamps, make contact sheets, export subtitles and articles, and transcribe speech locally.
+- **Read messages**: fetch DMs, replies, mentions, like notifications, comments and recent live chat; detect new uploads and collection members with saved progress. Official submission callbacks and live streams require application authorization.
+- **Manage libraries**: manage watch later, create or edit favorite folders, copy or move video batches, and change their order after approval.
 - **Interact and post**: like, favorite, follow, send coins, use triple actions, reply to comments, send DMs or danmaku, and create, edit or delete text and image posts. Each action needs approval.
 - **Manage submissions**: view creator statistics and upload, publish, edit or delete videos and articles through Bilibili's official open platform. This requires separate application authorization.
 - **Log in**: scan a QR code with the Bilibili app, then check your login status or refresh cookies through the CLI or SDK.
 
 See the [usage reference](docs/usage.md) for parameters and the [changelog](CHANGELOG.md) for version history.
 
-Video merging, audio trimming and frame extraction require a separate ffmpeg installation. Live chat tools fetch recent messages; your application must call them periodically. Dynamic editing, media downloads and frame extraction have passed real-account tests. See the [verification record](docs/verification.md) for coverage and known limitations.
+Video merging, audio trimming and frame extraction require ffmpeg; local speech transcription also requires whisper.cpp and a model. Recent live chat is polled, while official live connections are explicitly started by the host. See the [extended capability guide](docs/agent-capabilities.md) for configuration and the [verification record](docs/verification.md) for coverage and limitations.
 
 ## Quick start
 
@@ -53,8 +54,8 @@ Paths are relative to the config file's directory. You can read public content w
 List the available commands, then try reading a video's metadata:
 
 ```sh
-npx --yes @bili-agent-kit/cli@0.2.1 help
-npx --yes @bili-agent-kit/cli@0.2.1 --config config.local.json video '{"bvid":"BV1xx411c7mD"}'
+npx --yes @bili-agent-kit/cli@latest help
+npx --yes @bili-agent-kit/cli@latest --config config.local.json video '{"bvid":"BV1xx411c7mD"}'
 ```
 
 The CLI returns JSON for use in scripts.
@@ -64,8 +65,8 @@ The CLI returns JSON for use in scripts.
 To read account content or interact with others, first log in from your terminal:
 
 ```sh
-npx --yes @bili-agent-kit/cli@0.2.1 --config config.local.json auth.login '{}'
-npx --yes @bili-agent-kit/cli@0.2.1 --config config.local.json auth.status '{}'
+npx --yes @bili-agent-kit/cli@latest --config config.local.json auth.login '{}'
+npx --yes @bili-agent-kit/cli@latest --config config.local.json auth.status '{}'
 ```
 
 Scan the QR code with the Bilibili app and confirm on your phone. Credentials are saved to `credentials.local.json`. The CLI and MCP server share the login when they use the same config.
@@ -81,7 +82,12 @@ Add this to your AI assistant's MCP configuration and replace the config path wi
   "mcpServers": {
     "bilibili": {
       "command": "npx",
-      "args": ["--yes", "@bili-agent-kit/mcp@0.2.1", "--config", "/absolute/path/config.local.json"]
+      "args": [
+        "--yes",
+        "@bili-agent-kit/mcp@latest",
+        "--config",
+        "/absolute/path/config.local.json"
+      ]
     }
   }
 }
@@ -94,7 +100,7 @@ On Windows, paths can use `D:/bilibili/config.local.json`.
 Install the SDK in your own project:
 
 ```sh
-npm install @bili-agent-kit/core@0.2.1
+npm install @bili-agent-kit/core
 ```
 
 Use ESM imports to read public video metadata:

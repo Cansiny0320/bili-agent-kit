@@ -9,9 +9,23 @@ import { object } from "./traffic.js";
 import { upstreamId } from "./references.js";
 import { KitError } from "./errors.js";
 import { digest } from "./wbi.js";
+import { scanCollection, type CollectionEventInput } from "./collection-events.js";
 
 export const eventInput = z.strictObject({
-  source: z.enum(["reply", "at", "like", "live", "comments"]),
+  source: z.enum([
+    "reply",
+    "at",
+    "like",
+    "live",
+    "comments",
+    "user_videos",
+    "collection",
+    "series",
+  ]),
+  uid: id.optional(),
+  seasonId: id.optional(),
+  seriesId: id.optional(),
+  maxPages: z.number().int().min(1).max(100).default(20),
   roomId: id.optional(),
   oid: id.optional(),
   root: id.optional(),
@@ -26,6 +40,17 @@ export class EventPoller {
   ) {}
   private async scope(input: z.input<typeof eventInput>) {
     const args = parse(eventInput, input);
+    const collection = ["user_videos", "collection", "series"].includes(args.source);
+    if (collection ? !args.uid : !!(args.uid || args.seasonId || args.seriesId))
+      throw new KitError("INVALID_INPUT", "uid applies only to user video and collection events.");
+    if (
+      (args.source === "collection") !== Boolean(args.seasonId) ||
+      (args.source === "series") !== Boolean(args.seriesId)
+    )
+      throw new KitError(
+        "INVALID_INPUT",
+        "Collection and series events require their matching identifier.",
+      );
     if (args.source === "live" && !args.roomId)
       throw new KitError("INVALID_INPUT", "Live events require a canonical roomId.");
     if (args.source !== "live" && args.roomId)
@@ -34,26 +59,39 @@ export class EventPoller {
       throw new KitError("INVALID_INPUT", "Comment events require a video aid as oid.");
     if (args.source !== "comments" && (args.oid || args.root))
       throw new KitError("INVALID_INPUT", "oid and root only apply to comment events.");
-    const session = await this.client.session(true);
+    const session = await this.client.session(!collection);
     return {
       args,
       session,
-      key: `${session.account}:${args.source}:${args.roomId ?? (args.oid ? `${args.oid}:${args.root ?? "top"}` : "inbox")}`,
+      collection,
+      key: `${session.account}:${args.source}:${collection ? `${args.uid}:${args.seasonId ?? args.seriesId ?? "uploads"}` : (args.roomId ?? (args.oid ? `${args.oid}:${args.root ?? "top"}` : "inbox"))}`,
     };
   }
   async peek(input: z.input<typeof eventInput>) {
-    const { args, key, session } = await this.scope(input);
+    const { args, key, session, collection } = await this.scope(input);
     const client = new BiliClient(
       this.client.traffic,
       async () => session.credentials,
       this.client.policy,
     );
     const reads = new ContentReads(client);
-    const coverage = args.source === "live" ? "recent_snapshot_only" : "bounded_inbox_pages";
+    const coverage = collection
+      ? "complete_bounded_membership_scan"
+      : args.source === "live"
+        ? "recent_snapshot_only"
+        : "bounded_inbox_pages";
     const before = (await this.store.snapshot()).events[key];
     if (before?.pending[0]) return { baseline: false, event: before.pending[0], coverage };
     const rows: EventMessage[] = [];
-    if (args.source === "live") {
+    if (collection) {
+      rows.push(
+        ...(await scanCollection(
+          reads,
+          args as CollectionEventInput,
+          this.client.traffic.clock.now() / 1000,
+        )),
+      );
+    } else if (args.source === "live") {
       const room = await client.liveInfo({ roomId: args.roomId! });
       if (String(room.room_id) !== args.roomId)
         throw new KitError("INVALID_INPUT", "Resolve the canonical live room ID first.");
@@ -125,7 +163,7 @@ export class EventPoller {
       for (let page = 0; page < 10; page++) {
         const data = object(
           await reads.call("notifications", {
-            kind: args.source,
+            kind: args.source as "reply" | "at" | "like",
             ...(cursorId ? { cursorId } : {}),
             ...(cursorTime !== undefined ? { cursorTime } : {}),
           }),
@@ -176,7 +214,7 @@ export class EventPoller {
     );
     const seen = new Set(before?.seen ?? []);
     const fresh = before
-      ? unique.filter((row) => !seen.has(row.key) && row.ts >= before.since)
+      ? unique.filter((row) => !seen.has(row.key) && (collection || row.ts >= before.since))
       : [];
     return this.store.transaction((state) => {
       if (state.events[key]?.revision !== before?.revision)
@@ -184,9 +222,12 @@ export class EventPoller {
       const next = {
         revision: (before?.revision ?? 0) + 1,
         since: before?.since ?? Math.max(0, ...unique.map((row) => row.ts)),
-        seen: [...new Set([...(before?.seen ?? []), ...unique.map((row) => row.key)])].slice(
-          -10000,
-        ),
+        seen: [
+          ...new Set([
+            ...(collection ? [] : (before?.seen ?? [])),
+            ...unique.map((row) => row.key),
+          ]),
+        ].slice(-10000),
         pending: fresh.map((message) => ({ receipt: randomUUID(), message })),
       };
       state.events[key] = next;
@@ -200,6 +241,9 @@ export class EventPoller {
       ...(a.roomId ? { roomId: a.roomId } : {}),
       ...(a.oid ? { oid: a.oid } : {}),
       ...(a.root ? { root: a.root } : {}),
+      ...(a.uid ? { uid: a.uid } : {}),
+      ...(a.seasonId ? { seasonId: a.seasonId } : {}),
+      ...(a.seriesId ? { seriesId: a.seriesId } : {}),
     });
     return this.store.transaction((state) => {
       const cursor = state.events[key];

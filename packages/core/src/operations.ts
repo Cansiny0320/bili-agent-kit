@@ -7,6 +7,7 @@ import { envelope, KitError, type Envelope } from "./errors.js";
 import { frameInput, sampleFrames } from "./frames.js";
 import { readInputs, type ReadName, type ReadArguments } from "./reads.js";
 import { eventInput, eventAckInput } from "./events.js";
+import { openEventInput, openEventAckInput } from "./open-events.js";
 
 const draftId = z.string().regex(/^[a-f0-9]{64}$/);
 const key = z.string().regex(/^[A-Za-z0-9_.:-]{1,128}$/);
@@ -24,6 +25,18 @@ function operation<S extends z.ZodType>(
   };
 }
 export const operations = {
+  open_events_poll: operation(
+    "Read the next durable official callback or live event; ingestion is managed by the host.",
+    openEventInput,
+    true,
+    (k, a) => k.openEvents.peek(a),
+  ),
+  open_events_ack: operation(
+    "Acknowledge the next official event after durable handling.",
+    openEventAckInput,
+    false,
+    (k, a) => k.openEvents.ack(a),
+  ),
   ...Object.fromEntries(
     Object.entries(openInputs).map(([name, schema]) => [
       name,
@@ -47,13 +60,13 @@ export const operations = {
     ]),
   ),
   events_poll: operation(
-    "Poll notifications or recent live messages once; replay until acknowledged. First call establishes a baseline.",
+    "Poll notifications, recent live messages, or new UP/collection/series members; replay until acknowledged. First call establishes a baseline.",
     eventInput,
     false,
     (k, a) => k.events.peek(a),
   ),
   events_ack: operation(
-    "Acknowledge a durably handled inbox/live receipt.",
+    "Acknowledge the next durably handled notification, live, or collection receipt.",
     eventAckInput,
     false,
     (k, a) => k.events.ack(a),

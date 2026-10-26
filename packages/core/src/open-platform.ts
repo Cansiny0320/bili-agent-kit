@@ -20,13 +20,16 @@ export const openCredentialSchema = z.strictObject({
   uid: id,
   scopes: z.array(z.string()).max(100),
   expiresAt: z.number().int().positive().optional(),
+  refreshToken: z.string().min(1).max(4096).optional(),
+  openId: z.string().min(1).max(256).optional(),
+  refreshPending: z.boolean().optional(),
 });
 export type OpenCredentials = z.output<typeof openCredentialSchema>;
 export interface OpenOptions {
   credentials: () => Promise<OpenCredentials | undefined>;
   maxUploadBytes?: number;
 }
-interface OpenSession extends Session {
+export interface OpenSession extends Session {
   authorization: OpenCredentials;
 }
 export const isOpenAction = (action: WriteAction): action is OpenAction =>
@@ -34,6 +37,7 @@ export const isOpenAction = (action: WriteAction): action is OpenAction =>
 const page = z.number().int().min(1).max(10000).default(1),
   size = z.number().int().min(1).max(50).default(20);
 export const openInputs = {
+  open_video_stats: z.strictObject({}),
   open_video_list: z.strictObject({
     page,
     size,
@@ -125,7 +129,9 @@ export class OpenPlatform {
   ) {
     this.traffic = new Traffic(traffic.store, traffic.clock, openFetcher(traffic.fetcher));
   }
-  async session(scope: "ARC_BASE" | "ATC_BASE"): Promise<OpenSession> {
+  async session(
+    scope: "ARC_BASE" | "ATC_BASE" | "ARC_DATA" | "USER_INFO" | "LIVE_ROOM_DATA",
+  ): Promise<OpenSession> {
     let value: unknown;
     try {
       value = await this.options?.credentials();
@@ -135,6 +141,11 @@ export class OpenPlatform {
     if (!value)
       throw new KitError("AUTH_REQUIRED", "Independent open platform credentials are required.");
     const authorization = parse(openCredentialSchema, value);
+    if (authorization.refreshPending)
+      throw new KitError(
+        "AUTH_REQUIRED",
+        "OAuth refresh outcome is uncertain; reauthorize before continuing.",
+      );
     if (!authorization.scopes.includes(scope))
       throw new KitError("FORBIDDEN", `Open platform scope ${scope} is required.`);
     if (
@@ -241,6 +252,14 @@ export class OpenPlatform {
     );
     if (path === "/arcopen/fn/archive/video/init")
       return { upload_token: object(result).upload_token };
+    if (path === "/arcopen/fn/live/room/ws-start") {
+      const connection = object(result),
+        info = object(connection.websocket_info);
+      return {
+        conn_id: connection.conn_id,
+        websocket_info: { auth_body: info.auth_body, wss_link: info.wss_link },
+      };
+    }
     return scrub(result, {
       app_secret: session.authorization.appSecret,
       access_token: session.authorization.accessToken,
@@ -248,9 +267,17 @@ export class OpenPlatform {
   }
   async call<K extends OpenName>(name: K, input: OpenArguments<K>): Promise<unknown> {
     const a = parse(openInputs[name], input) as Record<string, unknown>;
-    const session = await this.session(name.startsWith("open_video") ? "ARC_BASE" : "ATC_BASE");
+    const session = await this.session(
+      name === "open_video_stats"
+        ? "ARC_DATA"
+        : name.startsWith("open_video")
+          ? "ARC_BASE"
+          : "ATC_BASE",
+    );
     let result: unknown;
-    if (name === "open_video")
+    if (name === "open_video_stats")
+      result = await this.request(session, "/arcopen/fn/data/arc/inc-stats", "GET");
+    else if (name === "open_video")
       result = await this.request(session, "/arcopen/fn/archive/view", "GET", undefined, {
         resource_id: String(a.resourceId),
       });

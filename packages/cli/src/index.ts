@@ -1,5 +1,6 @@
 import {
   loadKit,
+  loadOpenAuth,
   invoke,
   describeOperations,
   envelope,
@@ -21,13 +22,23 @@ export async function runCli(
       ok: true,
       data: {
         usage:
-          "bili-agent --config config.local.json <operation|auth.login|auth.status|auth.logout|auth.refresh-check|auth.refresh|admin.approve|admin.reconcile|admin.resume> <JSON|->",
+          "bili-agent --config config.local.json <operation|auth.login|auth.status|auth.logout|auth.refresh-check|auth.refresh|open.auth.begin|open.auth.exchange|open.auth.refresh|open.auth.status|open.auth.logout|admin.approve|admin.reconcile|admin.resume> <JSON|->",
         auth: {
           "auth.login": { png: "optional new PNG path" },
           "auth.status": {},
           "auth.logout": {},
           "auth.refresh-check": {},
           "auth.refresh": {},
+        },
+        openAuth: {
+          "open.auth.begin": { redirectUrl: "registered HTTPS callback URL" },
+          "open.auth.exchange": {
+            code: "authorization code; prefer stdin",
+            state: "returned OAuth state",
+          },
+          "open.auth.refresh": {},
+          "open.auth.status": {},
+          "open.auth.logout": {},
         },
         operations: describeOperations(),
       },
@@ -48,6 +59,7 @@ export async function runCli(
       throw new KitError("INVALID_INPUT", "Input must be valid JSON.");
     }
     if (name?.startsWith("auth.")) return runAuthCli(argv[1], name, input, authOptions);
+    if (name?.startsWith("open.auth.")) return (await loadOpenAuth(argv[1])).call(name, input);
     const kit = await load(argv[1]);
     if (name?.startsWith("admin.")) {
       if (!input || typeof input !== "object" || Array.isArray(input))

@@ -16,6 +16,8 @@ import { ContentReads, readMethods, type ReadMethods } from "./reads.js";
 import { OpenPlatform, type OpenOptions } from "./open-platform.js";
 import { Media, type MediaOptions } from "./media.js";
 import { EventPoller } from "./events.js";
+import { OpenEvents } from "./open-events.js";
+import { OpenLive } from "./open-live.js";
 
 export interface KitOptions {
   store: StateStore;
@@ -39,6 +41,8 @@ export type ReadApi = Pick<
   };
 export class BiliKit {
   readonly open: OpenPlatform;
+  readonly openEvents: OpenEvents;
+  readonly openLive: OpenLive;
   readonly media: Media;
   readonly content: ContentReads;
   readonly events: EventPoller;
@@ -72,6 +76,12 @@ export class BiliKit {
       options.openPlatform,
       (options.media ?? options.frames)?.mediaRoot,
     );
+    this.openEvents = new OpenEvents(
+      options.store,
+      options.clock ?? systemClock,
+      options.openPlatform,
+    );
+    this.openLive = new OpenLive(this.open, this.openEvents);
     this.writes = new Writes(
       client,
       options.store,

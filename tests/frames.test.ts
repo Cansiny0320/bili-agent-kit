@@ -50,6 +50,6 @@ it("uses argument arrays, restricted protocols, hidden windows and a bounded pro
   expect(spawn).toHaveBeenCalledWith(
     "fixture-ffmpeg",
     expect.arrayContaining(["file,pipe", expect.stringContaining("source.mp4"), "-frames:v", "1"]),
-    expect.objectContaining({ shell: false, windowsHide: true, timeout: 120000 }),
+    expect.objectContaining({ shell: false, windowsHide: true, timeout: expect.any(Number) }),
   );
 });

@@ -17,7 +17,16 @@ export {
   type State,
 } from "./contracts.js";
 export { invoke, operations, describeOperations, type OperationName } from "./operations.js";
-export { loadKit, loadAuth, configSchema } from "./runtime.js";
+export { loadKit, loadAuth, loadOpenAuth, configSchema } from "./runtime.js";
+export { OpenAuth, openAuthInputs } from "./open-auth.js";
+export { OpenEvents, openEventInput, openEventAckInput } from "./open-events.js";
+export {
+  OpenLive,
+  encodeLivePacket,
+  decodeLivePackets,
+  type LiveRunOptions,
+  type LiveSocket,
+} from "./open-live.js";
 export { FileAuth, type LoginOptions } from "./auth-runtime.js";
 export { FileCredentials, writePrivateFile } from "./credentials.js";
 export { sampleFrames, type FrameOptions } from "./frames.js";
@@ -45,6 +54,7 @@ export { Media, mediaInputs, articleMarkdown } from "./media.js";
 export type { MediaOptions, MediaImage, MediaName, MediaArguments } from "./media.js";
 
 export { CookieRefresh } from "./auth-refresh.js";
+export { asrConfig, asrInput, transcribe, type AsrOptions } from "./asr.js";
 
 export { OpenPlatform, openInputs, openCredentialSchema, signOpen } from "./open-platform.js";
 export type { OpenOptions, OpenCredentials, OpenName, OpenArguments } from "./open-platform.js";

@@ -17,6 +17,8 @@ it("migrates legacy budgets, pauses and cursors once and preserves same-UID budg
       readDay: 10,
       writeHour: 2,
       writeDay: 3,
+      serviceHour: 0,
+      serviceDay: 0,
       lastWrite: 90,
     };
     s.traffic.manual[old] = true;
@@ -84,6 +86,8 @@ it("waits for live requests, recovers expired leases and incorporates a concurre
       readDay: 1,
       writeHour: 0,
       writeDay: 0,
+      serviceHour: 0,
+      serviceDay: 0,
       lastWrite: 0,
     };
   });

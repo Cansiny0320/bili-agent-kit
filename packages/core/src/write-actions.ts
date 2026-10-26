@@ -6,6 +6,7 @@ import { localFile, imageType } from "./files.js";
 import { object } from "./traffic.js";
 import { upstream } from "./models.js";
 import { KitError } from "./errors.js";
+import { isLibrary, libraryPreflight, executeLibrary, libraryMembers } from "./library.js";
 
 export type Step = (name: string, run: () => Promise<unknown>) => Promise<unknown>;
 export const isExtended = (action: WriteAction): action is ExtendedAction =>
@@ -27,6 +28,10 @@ export async function extendedPreflight(
   action: ExtendedAction,
   s: Session,
 ): Promise<Record<string, unknown>[]> {
+  if (isLibrary(action)) {
+    await libraryPreflight(client, action, s);
+    return [];
+  }
   if (action.kind === "dynamic.create" && s.account !== `uid:${action.uid}`)
     throw new KitError("FORBIDDEN", "Dynamic author must match the authenticated account.");
   if (action.kind === "favorite.add" || action.kind === "favorite.remove") {
@@ -93,10 +98,27 @@ export async function executeExtended(
   existingPics: Record<string, unknown>[],
   root?: string,
 ): Promise<unknown> {
+  if (isLibrary(action)) return executeLibrary(client, action, s, draftId, step);
   const csrf = s.credentials?.bili_jct ?? "";
   const post = (path: string, fields: Record<string, string>, origin = API) =>
     step("send", () => client.post(path, { ...fields, csrf }, origin, s, draftId));
   switch (action.kind) {
+    case "watch_later.add":
+    case "watch_later.remove": {
+      const add = action.kind === "watch_later.add";
+      const result = await post(
+        add ? "/x/v2/history/toview/add" : "/x/v2/history/toview/v2/dels",
+        add ? { aid: action.aid } : { resources: action.aid },
+      );
+      const present = (await libraryMembers(client, s)).includes(action.aid);
+      await step("verify", async () => ({ aid: action.aid, present }));
+      if (present !== add)
+        throw new KitError(
+          "UNKNOWN_OUTCOME",
+          "Watch later readback did not confirm the requested change.",
+        );
+      return { result, verified: true, aid: action.aid, present };
+    }
     case "video.like":
       return post("/x/web-interface/archive/like", {
         aid: action.aid,

@@ -101,6 +101,8 @@ it("read budgets and corrupt state stop before network, including after restart"
       readDay: 600,
       writeHour: 0,
       writeDay: 0,
+      serviceHour: 0,
+      serviceDay: 0,
       lastWrite: 0,
     };
   });

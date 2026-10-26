@@ -15,16 +15,17 @@ bili-agent-kit 让 AI 助手和你的程序调用 B 站功能：搜索视频、�
 
 ## 能做什么
 
-- **查内容**：搜索视频，查看热门、排行、UP 主投稿、收藏、历史、动态、专栏、评论、弹幕和 B 站 AI 总结。
-- **处理视频和音频**：识别 BV、AV、视频链接和分 P，下载视频或音频，裁剪音频、截取画面、生成拼图，导出字幕和文章。
-- **收消息**：读取私信、回复、@、点赞通知、评论和近期直播弹幕，保存处理进度，减少重复处理。
+- **查内容**：搜索视频，查看热门、排行、UP 主投稿、合集与系列、收藏、历史、动态、专栏、评论、弹幕和 B 站 AI 总结。
+- **处理视频和音频**：识别 BV、AV、视频链接和分 P，下载视频或音频，裁剪音频、按时间点截取画面、生成拼图，导出字幕和文章，使用本地模型转写语音。
+- **收消息**：读取私信、回复、@、点赞通知、评论和近期直播弹幕，检测 UP 投稿及合集新增内容，保存处理进度。官方投稿回调和直播推送需应用授权。
+- **管理收藏**：管理稍后再看，创建或编辑收藏夹，批量复制、移动视频和调整顺序，执行前需要确认。
 - **互动和发动态**：点赞、收藏、关注、投币、三连、回复评论、发私信和弹幕，发布、编辑或删除文字及图文动态。执行前需要确认。
 - **管理稿件**：查看创作数据，通过 B 站官方开放平台上传、发布、编辑或删除视频和文章，需要单独的应用授权。
 - **登录账号**：用哔哩哔哩 App 扫码登录，通过 CLI 或 SDK 查看登录状态、检查和刷新 Cookie。
 
 详细参数见 [使用说明](docs/usage.md)，版本变化见 [更新记录](CHANGELOG.md)。
 
-视频合并、音频裁剪和抽帧需要另行安装 ffmpeg。直播工具读取的是近期消息，需要由你的程序定期调用。动态编辑、下载和抽帧已通过真实账号验证，完整覆盖范围和已知限制见[验证记录](docs/verification.md)。
+视频合并、音频裁剪和抽帧需要另行安装 ffmpeg；本地语音转写还需 whisper.cpp 和模型。近期直播消息通过轮询读取，官方直播连接由宿主显式启动。新增能力配置见[扩展说明](docs/agent-capabilities.md)，真实验证范围和已知限制见[验证记录](docs/verification.md)。
 
 ## 快速开始
 
@@ -53,8 +54,8 @@ bili-agent-kit 让 AI 助手和你的程序调用 B 站功能：搜索视频、�
 查看可用命令，再试着读取视频信息：
 
 ```sh
-npx --yes @bili-agent-kit/cli@0.2.1 help
-npx --yes @bili-agent-kit/cli@0.2.1 --config config.local.json video '{"bvid":"BV1xx411c7mD"}'
+npx --yes @bili-agent-kit/cli@latest help
+npx --yes @bili-agent-kit/cli@latest --config config.local.json video '{"bvid":"BV1xx411c7mD"}'
 ```
 
 CLI 返回 JSON，方便在脚本中使用。
@@ -64,8 +65,8 @@ CLI 返回 JSON，方便在脚本中使用。
 需要读取账号内容或执行互动时，先在终端登录：
 
 ```sh
-npx --yes @bili-agent-kit/cli@0.2.1 --config config.local.json auth.login '{}'
-npx --yes @bili-agent-kit/cli@0.2.1 --config config.local.json auth.status '{}'
+npx --yes @bili-agent-kit/cli@latest --config config.local.json auth.login '{}'
+npx --yes @bili-agent-kit/cli@latest --config config.local.json auth.status '{}'
 ```
 
 用哔哩哔哩 App 扫码，在手机上确认即可。登录信息会保存到 `credentials.local.json`，CLI 和 MCP 使用同一份配置就能共用登录状态。
@@ -81,7 +82,12 @@ npx --yes @bili-agent-kit/cli@0.2.1 --config config.local.json auth.status '{}'
   "mcpServers": {
     "bilibili": {
       "command": "npx",
-      "args": ["--yes", "@bili-agent-kit/mcp@0.2.1", "--config", "/absolute/path/config.local.json"]
+      "args": [
+        "--yes",
+        "@bili-agent-kit/mcp@latest",
+        "--config",
+        "/absolute/path/config.local.json"
+      ]
     }
   }
 }
@@ -94,7 +100,7 @@ Windows 路径可以写成 `D:/bilibili/config.local.json`。
 在自己的项目中安装 SDK：
 
 ```sh
-npm install @bili-agent-kit/core@0.2.1
+npm install @bili-agent-kit/core
 ```
 
 使用 ESM 导入，读取公开视频信息：

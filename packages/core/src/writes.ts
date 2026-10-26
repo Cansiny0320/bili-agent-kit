@@ -3,6 +3,7 @@ import {
   actionSchema,
   parse,
   targetOf,
+  targetsOf,
   type Draft,
   type WriteAction,
   type WriteActionInput,
@@ -14,6 +15,7 @@ import { digest } from "./wbi.js";
 import type { StateStore } from "./state.js";
 import { isOpenAction, type OpenPlatform } from "./open-platform.js";
 import { legacyActionKinds } from "./actions.js";
+import { bindLibrary } from "./library.js";
 import {
   bindAttachments,
   executeExtended,
@@ -56,16 +58,22 @@ export class Writes {
   preview(input: WriteActionInput): {
     action: WriteAction;
     target: string;
+    targets: string[];
     writesEnabled: boolean;
   } {
     const action = parse(actionSchema, input);
-    return { action, target: targetOf(action), writesEnabled: this.#client.policy.writesEnabled };
+    return {
+      action,
+      target: targetOf(action),
+      targets: targetsOf(action),
+      writesEnabled: this.#client.policy.writesEnabled,
+    };
   }
   checkPolicy(action: WriteAction): void {
     const p = this.#client.policy;
     if (!this.#store.durable)
       throw new KitError("FORBIDDEN", "External writes require durable state.");
-    if (!p.writesEnabled || !p.allowedTargets.includes(targetOf(action)))
+    if (!p.writesEnabled || !targetsOf(action).every((target) => p.allowedTargets.includes(target)))
       throw new KitError("FORBIDDEN", "Writing is disabled or the target is not allowed.");
     if (!legacyActionKinds.includes(action.kind) && !p.allowedActions.includes(action.kind))
       throw new KitError("FORBIDDEN", "This write action must be explicitly enabled.");
@@ -77,6 +85,7 @@ export class Writes {
     this.checkPolicy(action);
     action = await this.#bind(action);
     const session = await this.#session(action);
+    action = parse(actionSchema, await bindLibrary(this.#client, action, session));
     const hash = digest(JSON.stringify({ account: session.fingerprint, action }));
     const draftId = digest(`${session.fingerprint}:${key}`);
     const draft = await this.#store.transaction((state) => {
@@ -281,12 +290,14 @@ export class Writes {
         }),
       );
     } catch (error) {
-      const definite =
-        error instanceof KitError &&
-        ["RATE_LIMITED", "TRAFFIC_PAUSED", "UPSTREAM"].includes(error.code);
-      await this.#store.transaction((state) => {
+      const definite = await this.#store.transaction((state) => {
         const current = state.drafts[draftId];
-        if (current) current.status = definite ? "rejected" : "unknown";
+        const rejected =
+          error instanceof KitError &&
+          ["RATE_LIMITED", "TRAFFIC_PAUSED", "UPSTREAM"].includes(error.code) &&
+          current?.steps.send?.status !== "done";
+        if (current) current.status = rejected ? "rejected" : "unknown";
+        return rejected;
       });
       if (!definite)
         throw new KitError(

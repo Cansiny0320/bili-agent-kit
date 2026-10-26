@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { invoke, operations, type BiliKit, type MediaImage } from "@bili-agent-kit/core";
 
 export function createMcpServer(kit: BiliKit): McpServer {
-  const server = new McpServer({ name: "bili-agent-kit", version: "0.1.0" });
+  const server = new McpServer({ name: "bili-agent-kit", version: "0.3.0" });
   for (const [name, op] of Object.entries(operations)) {
     server.registerTool(
       `bili_${name}`,
