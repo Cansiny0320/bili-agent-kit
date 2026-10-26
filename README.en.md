@@ -1,5 +1,5 @@
 <h1 align="center">bili-agent-kit</h1>
-<p align="center">Bilibili tools for AI assistants and applications.</p>
+<p align="center">Connect your Agent to Bilibili with MCP, CLI and SDK.</p>
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT License"></a>
   <img src="https://img.shields.io/badge/TypeScript-SDK%20%7C%20CLI%20%7C%20MCP-3178c6" alt="TypeScript SDK, CLI and MCP">
@@ -9,23 +9,26 @@
   <a href="README.md">简体中文</a> · <a href="README.en.md">English</a> · <a href="https://github.com/Cansiny0320/bili-agent-kit/issues">Feedback</a>
 </p>
 
-bili-agent-kit lets AI assistants and your applications use Bilibili: find content, download and transcribe media, organize favorites, track uploads and messages, and interact or publish after your approval.
+## Supported capabilities
 
-Choose an MCP server, command-line tool or TypeScript SDK to fit your setup.
-
-## What can it do?
-
-- **Find content**: search videos and browse popular videos, rankings, creators' uploads, collections and series, favorites, history, posts, articles, comments, danmaku and Bilibili AI summaries.
-- **Work with video and audio**: resolve BV/AV IDs, links and multipart videos; download video or audio, trim audio, extract frames at selected timestamps, make contact sheets, export subtitles and articles, and transcribe speech locally.
-- **Read messages**: fetch DMs, replies, mentions, like notifications, comments and recent live chat; detect new uploads and collection members with saved progress. Official submission callbacks and live streams require application authorization.
-- **Manage libraries**: manage watch later, create or edit favorite folders, copy or move video batches, and change their order after approval.
-- **Interact and post**: like, favorite, follow, send coins, use triple actions, reply to comments, send DMs or danmaku, and create, edit or delete text and image posts. Each action needs approval.
-- **Manage submissions**: view creator statistics and upload, publish, edit or delete videos and articles through Bilibili's official open platform. This requires separate application authorization.
-- **Log in**: scan a QR code with the Bilibili app, then check your login status or refresh cookies through the CLI or SDK.
+| Capability                                                       | MCP | CLI | SDK |
+| ---------------------------------------------------------------- | :-: | :-: | :-: |
+| Video search, rankings, creator uploads, collections and series  |  ✓  |  ✓  |  ✓  |
+| Subtitles, comments, danmaku, posts and articles                 |  ✓  |  ✓  |  ✓  |
+| Media downloads, trimming, timestamped frames and contact sheets |  ✓  |  ✓  |  ✓  |
+| Local ASR, subtitle and article export                           |  ✓  |  ✓  |  ✓  |
+| Favorite folders and watch later                                 |  ✓  |  ✓  |  ✓  |
+| DMs, notifications, comments and new-upload events               |  ✓  |  ✓  |  ✓  |
+| Likes, coins, triple actions, follows, comments, DMs and danmaku |  ✓  |  ✓  |  ✓  |
+| Text and image post creation, editing and deletion               |  ✓  |  ✓  |  ✓  |
+| Official creator data, video and article submissions             |  ✓  |  ✓  |  ✓  |
+| Official Webhook and live event consumption                      |  ✓  |  ✓  |  ✓  |
+| QR login, Cookie/OAuth management and action approval            |  —  |  ✓  |  ✓  |
+| Official Webhook ingestion and live connections                  |  —  |  —  |  ✓  |
 
 See the [usage reference](docs/usage.md) for parameters and the [changelog](CHANGELOG.md) for version history.
 
-Recent live chat is polled, while official live connections are explicitly started by the host. Configure media dependencies and application authorization for the features you use. See the [verification record](docs/verification.md) for tested coverage and known limitations.
+Writes require approval, and media processing requires the corresponding dependencies. Official integrations require application authorization and have only passed protocol fixture tests; see the [verification record](docs/verification.md) for coverage.
 
 ## Quick start
 
@@ -114,57 +117,6 @@ console.log(video.title);
 ```
 
 To share CLI/MCP configuration and login state, import `loadKit` from the same package and call `await loadKit("./config.local.json")`. See the [usage reference](docs/usage.md) for the full API.
-
-## Collections, subtitles and upload events
-
-Reuse the configuration and login above:
-
-```sh
-# List a creator's collections and series
-npx --yes @bili-agent-kit/cli@latest --config config.local.json collections '{"uid":"2267573"}'
-
-# Read existing subtitles from 30–90 seconds with original timestamps; login required
-npx --yes @bili-agent-kit/cli@latest --config config.local.json transcript '{"reference":"BV1EJ411i7Q9","startSeconds":30,"endSeconds":90,"format":"srt"}'
-
-# Detect new uploads from a creator
-npx --yes @bili-agent-kit/cli@latest --config config.local.json events_poll '{"source":"user_videos","uid":"2267573"}'
-```
-
-The first event poll establishes a baseline. Your application must poll periodically and call `events_ack` after handling an event; unacknowledged events are returned again. See the [extended capability guide](docs/agent-capabilities.md) for collection and series pagination, watch later, and favorite management.
-
-## Frame extraction and local transcription
-
-Install FFmpeg; speech transcription also needs whisper.cpp and a model file. Add [media and ASR configuration](docs/agent-capabilities.md#时间素材与本地-asr) to `config.local.json`, specifying input/output directories and the model path, then run:
-
-```sh
-# Extract frames at two timestamps
-npx --yes @bili-agent-kit/cli@latest --config config.local.json online_frames '{"reference":"BV1EJ411i7Q9","timestampsSeconds":[12.5,31]}'
-
-# Download audio and transcribe 30–90 seconds locally, returning SRT text
-npx --yes @bili-agent-kit/cli@latest --config config.local.json asr_transcribe '{"reference":"BV1EJ411i7Q9","startSeconds":30,"durationSeconds":60,"language":"zh","format":"srt"}'
-```
-
-ASR also accepts local files inside the configured media directory and does not upload audio to a cloud service. Accuracy depends on the model and audio quality. Subtitle retrieval and speech transcription are separate calls; missing subtitles do not automatically start transcription.
-
-## Official open platform
-
-Official creator data, submissions, Webhooks and live streams require your own open-platform application and the appropriate permissions. QR-login cookies do not replace application authorization. The CLI/SDK supports OAuth code exchange and token refresh. Your service receives callbacks and starts live connections; CLI/MCP tools consume the stored events. Submission callbacks cover only videos submitted through your application.
-
-These integrations have passed protocol fixture tests and still require validation with an authorized application. See [official authorization and push events](docs/agent-capabilities.md#官方-oauth数据和推送) for setup.
-
-## Upgrading from 0.2.x
-
-v0.3.0 uses state format v3. Stop older processes sharing the same `stateDir` before upgrading. The first transaction backs up the old state and migrates drafts, budgets and message progress. Do not alternate versions against the same directory or restore an old backup after new writes. See [state migration and recovery](docs/usage.md#状态升级与恢复).
-
-CLI/MCP commands using `@latest` resolve the latest published version; restart an existing MCP service to update it. SDK projects can run `npm install @bili-agent-kit/core@latest`.
-
-## Interactions, publishing and account data
-
-Favorite management, likes, replies, posts and submissions are disabled by default. Configure the allowed actions and targets before using them. Each action starts with a draft that you review and approve through the CLI or SDK. If the result is unclear, execution stops until you check what happened. DMs also require a trusted recipient and mutual following.
-
-Login credentials are saved as plaintext in the local file you specify; the toolkit does not extract cookies from your browser. Drafts, message progress and upload records are saved in `stateDir`, separate from account credentials. Keep these files out of repositories and do not share them.
-
-MCP does not expose approval tools. **An AI that can run administrator commands or modify credentials and state files can bypass these restrictions.** Restrict that access separately; see [security and recovery](SECURITY.md) for details.
 
 ## License
 
