@@ -46,6 +46,27 @@ export function releaseNotes(changelog, version) {
   return changelog.split(marker)[1].split(/\n## /)[0].trim() + "\n";
 }
 
+export async function waitForPublication(
+  read,
+  {
+    timeoutMs = 600000,
+    now = Date.now,
+    sleep = (ms) => new Promise((done) => setTimeout(done, ms)),
+  } = {},
+) {
+  const deadline = now() + timeoutMs;
+  for (;;) {
+    const published = await read();
+    if (published) return published;
+    const remaining = deadline - now();
+    assert.ok(
+      remaining > 0,
+      "npm is still processing this version; check its status before rerunning",
+    );
+    await sleep(Math.min(10000, remaining));
+  }
+}
+
 function run(command, args, cwd = root) {
   execFileSync(command, args, { cwd, stdio: "inherit", timeout: 180000 });
 }
@@ -100,16 +121,7 @@ async function main() {
         `--registry=${registry}`,
       ]);
     } else console.log(`${candidate.name}@${version} already matches; skipping`);
-    let published = null;
-    for (let attempt = 0; attempt < 12; attempt++) {
-      published = await registryVersion(candidate.name, version);
-      if (published) break;
-      await new Promise((done) => setTimeout(done, 5000));
-    }
-    assert.ok(
-      published,
-      `Published ${candidate.name} is not yet visible; rerun after checking npm`,
-    );
+    const published = await waitForPublication(() => registryVersion(candidate.name, version));
     publicationState(published, candidate.integrity);
     if (candidate.name !== "@bili-agent-kit/core")
       assert.equal(published.dependencies?.["@bili-agent-kit/core"], version);

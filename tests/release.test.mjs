@@ -4,7 +4,41 @@ import {
   publicationState,
   registryVersion,
   releaseNotes,
+  waitForPublication,
 } from "../scripts/release.mjs";
+
+it("waits through npm processing longer than one minute without resubmitting", async () => {
+  let now = 0;
+  let reads = 0;
+  const expected = { version: "0.2.0" };
+  const published = await waitForPublication(async () => (++reads >= 14 ? expected : null), {
+    now: () => now,
+    sleep: async (ms) => {
+      now += ms;
+    },
+  });
+  expect(published).toBe(expected);
+  expect(now).toBeGreaterThan(60000);
+});
+
+it("stops waiting at its deadline and preserves registry errors", async () => {
+  let now = 0;
+  await expect(
+    waitForPublication(async () => null, {
+      timeoutMs: 15000,
+      now: () => now,
+      sleep: async (ms) => {
+        now += ms;
+      },
+    }),
+  ).rejects.toThrow("still processing");
+  expect(now).toBe(15000);
+  await expect(
+    waitForPublication(async () => {
+      throw new Error("HTTP 503");
+    }),
+  ).rejects.toThrow("HTTP 503");
+});
 
 it("rejects mismatched package versions and non-release tags", () => {
   const manifests = [
