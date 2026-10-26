@@ -1,6 +1,6 @@
 {
   "name": "@bili-agent-kit/cli",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "JSON CLI for bili-agent-kit",
   "homepage": "https://github.com/Cansiny0320/bili-agent-kit#readme",
   "bugs": {

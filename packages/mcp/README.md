@@ -9,7 +9,7 @@ Configure an MCP host, replacing the config path with an absolute path on your c
   "mcpServers": {
     "bilibili": {
       "command": "npx",
-      "args": ["--yes", "@bili-agent-kit/mcp@0.2.0", "--config", "/absolute/path/config.local.json"]
+      "args": ["--yes", "@bili-agent-kit/mcp@0.2.1", "--config", "/absolute/path/config.local.json"]
     }
   }
 }
@@ -28,7 +28,7 @@ Example `config.local.json`:
 For authenticated access, first run the separate administrator CLI against the same config:
 
 ```sh
-npx --yes @bili-agent-kit/cli@0.2.0 --config /absolute/path/config.local.json auth.login '{}'
+npx --yes @bili-agent-kit/cli@0.2.1 --config /absolute/path/config.local.json auth.login '{}'
 ```
 
 The server exposes the shared public operation registry for discovery, content, media, events, controlled writes and open-platform reads. Frame tools return native image content. Login, approval, credential management and account recovery are not MCP tools. Writes remain disabled until explicitly configured and approved. Keep credentials and administrator shell access isolated from the model. stdout is reserved for JSON-RPC.

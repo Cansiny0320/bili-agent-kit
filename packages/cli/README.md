@@ -3,9 +3,9 @@
 JSON command line interface for discovery, content, media, events, approved writes and trusted account administration for bili-agent-kit. ESM; requires Node.js 22.18+, 24.11+ or 26+ (Node 23/25 unsupported).
 
 ```sh
-npx --yes @bili-agent-kit/cli@0.2.0 help
-npx --yes @bili-agent-kit/cli@0.2.0 --config ./config.local.json auth.login '{}'
-npx --yes @bili-agent-kit/cli@0.2.0 --config ./config.local.json auth.status '{}'
+npx --yes @bili-agent-kit/cli@0.2.1 help
+npx --yes @bili-agent-kit/cli@0.2.1 --config ./config.local.json auth.login '{}'
+npx --yes @bili-agent-kit/cli@0.2.1 --config ./config.local.json auth.status '{}'
 ```
 
 Create `config.local.json` before login:

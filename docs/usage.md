@@ -1,6 +1,6 @@
 # 使用说明
 
-本页对应 `0.2.0`。CLI、MCP 和 SDK 共用 core 的操作定义。`help` / `list` 返回完整输入 schema，MCP 工具名为 CLI 名称加 `bili_` 前缀。所有 ID 使用字符串，页码和数量使用数字。
+本页对应 `0.2.1`。CLI、MCP 和 SDK 共用 core 的操作定义。`help` / `list` 返回完整输入 schema，MCP 工具名为 CLI 名称加 `bili_` 前缀。所有 ID 使用字符串，页码和数量使用数字。
 
 ## 配置
 
@@ -251,7 +251,7 @@ pnpm smoke
 
 `packages/core` owns all behavior and schemas; `packages/cli` and `packages/mcp` adapt them. Build output is ESM (`.mjs`) with TypeScript declarations (`.d.mts`). Vite+ uses its own version number for the bundled Vite API; the targeted pnpm peer rules acknowledge that alias. TypeScript 7.0.2 is stable, while Vite+'s declaration emitter currently warns that its TypeScript 7 integration is experimental; declaration files and package exports are checked by `pnpm smoke`.
 
-本页示例使用 `pnpm build` 后的本地 CLI；使用 npm 包时，将 `node packages/cli/dist/main.mjs` 替换为 `npx --yes @bili-agent-kit/cli@0.2.0`，其他参数保持不变。
+本页示例使用 `pnpm build` 后的本地 CLI；使用 npm 包时，将 `node packages/cli/dist/main.mjs` 替换为 `npx --yes @bili-agent-kit/cli@0.2.1`，其他参数保持不变。
 
 For local package verification, `pnpm --filter @bili-agent-kit/core pack --pack-destination ./artifacts` creates a package archive. When testing unpublished CLI/MCP changes, also supply the core tarball and a package-manager override resolving `@bili-agent-kit/core` to that local archive; otherwise the dependency would resolve from npm. `scripts/smoke.mjs` demonstrates the complete isolated installation. These development checks do not publish to npm; automatic releases are described below.
 
@@ -273,9 +273,9 @@ GitHub 的 `npm` environment 仅允许 `v*` tag 部署。工作流发布阶段�
 后续发版时，同步更新根目录与三个包的 `version`、安装示例和 `CHANGELOG.md`，完成检查并提交，推送相同版本 tag，例如：
 
 ```sh
-node scripts/release.mjs check v0.2.0
-git tag -a v0.2.0 -m 'Release v0.2.0'
-git push origin main v0.2.0
+node scripts/release.mjs check v0.2.1
+git tag -a v0.2.1 -m 'Release v0.2.1'
+git push origin main v0.2.1
 ```
 
 示例版本仅用于说明，已发布版本不能复用。`scripts/release.mjs check` 是本地校验；`publish` 模式只允许对应 GitHub 仓库的 tag/OIDC 环境运行。
