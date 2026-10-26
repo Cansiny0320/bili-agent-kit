@@ -9,7 +9,7 @@
   <a href="README.md">简体中文</a> · <a href="README.en.md">English</a> · <a href="https://github.com/Cansiny0320/bili-agent-kit/issues">Feedback</a>
 </p>
 
-bili-agent-kit lets AI assistants and your own applications use Bilibili: search videos, read subtitles and comments, download video or audio, handle messages, and like, reply or publish after your approval.
+bili-agent-kit lets AI assistants and your applications use Bilibili: find content, download and transcribe media, organize favorites, track uploads and messages, and interact or publish after your approval.
 
 Choose an MCP server, command-line tool or TypeScript SDK to fit your setup.
 
@@ -25,7 +25,7 @@ Choose an MCP server, command-line tool or TypeScript SDK to fit your setup.
 
 See the [usage reference](docs/usage.md) for parameters and the [changelog](CHANGELOG.md) for version history.
 
-Video merging, audio trimming and frame extraction require ffmpeg; local speech transcription also requires whisper.cpp and a model. Recent live chat is polled, while official live connections are explicitly started by the host. See the [extended capability guide](docs/agent-capabilities.md) for configuration and the [verification record](docs/verification.md) for coverage and limitations.
+Recent live chat is polled, while official live connections are explicitly started by the host. Configure media dependencies and application authorization for the features you use. See the [verification record](docs/verification.md) for tested coverage and known limitations.
 
 ## Quick start
 
@@ -115,9 +115,52 @@ console.log(video.title);
 
 To share CLI/MCP configuration and login state, import `loadKit` from the same package and call `await loadKit("./config.local.json")`. See the [usage reference](docs/usage.md) for the full API.
 
+## Collections, subtitles and upload events
+
+Reuse the configuration and login above:
+
+```sh
+# List a creator's collections and series
+npx --yes @bili-agent-kit/cli@latest --config config.local.json collections '{"uid":"2267573"}'
+
+# Read existing subtitles from 30–90 seconds with original timestamps; login required
+npx --yes @bili-agent-kit/cli@latest --config config.local.json transcript '{"reference":"BV1EJ411i7Q9","startSeconds":30,"endSeconds":90,"format":"srt"}'
+
+# Detect new uploads from a creator
+npx --yes @bili-agent-kit/cli@latest --config config.local.json events_poll '{"source":"user_videos","uid":"2267573"}'
+```
+
+The first event poll establishes a baseline. Your application must poll periodically and call `events_ack` after handling an event; unacknowledged events are returned again. See the [extended capability guide](docs/agent-capabilities.md) for collection and series pagination, watch later, and favorite management.
+
+## Frame extraction and local transcription
+
+Install FFmpeg; speech transcription also needs whisper.cpp and a model file. Add [media and ASR configuration](docs/agent-capabilities.md#时间素材与本地-asr) to `config.local.json`, specifying input/output directories and the model path, then run:
+
+```sh
+# Extract frames at two timestamps
+npx --yes @bili-agent-kit/cli@latest --config config.local.json online_frames '{"reference":"BV1EJ411i7Q9","timestampsSeconds":[12.5,31]}'
+
+# Download audio and transcribe 30–90 seconds locally, returning SRT text
+npx --yes @bili-agent-kit/cli@latest --config config.local.json asr_transcribe '{"reference":"BV1EJ411i7Q9","startSeconds":30,"durationSeconds":60,"language":"zh","format":"srt"}'
+```
+
+ASR also accepts local files inside the configured media directory and does not upload audio to a cloud service. Accuracy depends on the model and audio quality. Subtitle retrieval and speech transcription are separate calls; missing subtitles do not automatically start transcription.
+
+## Official open platform
+
+Official creator data, submissions, Webhooks and live streams require your own open-platform application and the appropriate permissions. QR-login cookies do not replace application authorization. The CLI/SDK supports OAuth code exchange and token refresh. Your service receives callbacks and starts live connections; CLI/MCP tools consume the stored events. Submission callbacks cover only videos submitted through your application.
+
+These integrations have passed protocol fixture tests and still require validation with an authorized application. See [official authorization and push events](docs/agent-capabilities.md#官方-oauth数据和推送) for setup.
+
+## Upgrading from 0.2.x
+
+v0.3.0 uses state format v3. Stop older processes sharing the same `stateDir` before upgrading. The first transaction backs up the old state and migrates drafts, budgets and message progress. Do not alternate versions against the same directory or restore an old backup after new writes. See [state migration and recovery](docs/usage.md#状态升级与恢复).
+
+CLI/MCP commands using `@latest` resolve the latest published version; restart an existing MCP service to update it. SDK projects can run `npm install @bili-agent-kit/core@latest`.
+
 ## Interactions, publishing and account data
 
-Likes, replies, posts and submissions are disabled by default. Configure the allowed actions and targets before using them. Each action starts with a draft that you review and approve through the CLI or SDK. If the result is unclear, execution stops until you check what happened. DMs also require a trusted recipient and mutual following.
+Favorite management, likes, replies, posts and submissions are disabled by default. Configure the allowed actions and targets before using them. Each action starts with a draft that you review and approve through the CLI or SDK. If the result is unclear, execution stops until you check what happened. DMs also require a trusted recipient and mutual following.
 
 Login credentials are saved as plaintext in the local file you specify; the toolkit does not extract cookies from your browser. Drafts, message progress and upload records are saved in `stateDir`, separate from account credentials. Keep these files out of repositories and do not share them.
 

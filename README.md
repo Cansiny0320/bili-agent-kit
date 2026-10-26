@@ -9,7 +9,7 @@
   <a href="README.md">简体中文</a> · <a href="README.en.md">English</a> · <a href="https://github.com/Cansiny0320/bili-agent-kit/issues">问题反馈</a>
 </p>
 
-bili-agent-kit 让 AI 助手和你的程序调用 B 站功能：搜索视频、读取字幕和评论、下载视频或音频、处理消息，也可以在你确认后点赞、回复或投稿。
+bili-agent-kit 让 AI 助手和你的程序调用 B 站功能：检索内容、下载和转写音视频、整理收藏、跟踪投稿与消息，也可以在你确认后互动、发动态或投稿。
 
 支持 MCP、命令行和 TypeScript SDK，按你的使用方式选择即可。
 
@@ -25,7 +25,7 @@ bili-agent-kit 让 AI 助手和你的程序调用 B 站功能：搜索视频、�
 
 详细参数见 [使用说明](docs/usage.md)，版本变化见 [更新记录](CHANGELOG.md)。
 
-视频合并、音频裁剪和抽帧需要另行安装 ffmpeg；本地语音转写还需 whisper.cpp 和模型。近期直播消息通过轮询读取，官方直播连接由宿主显式启动。新增能力配置见[扩展说明](docs/agent-capabilities.md)，真实验证范围和已知限制见[验证记录](docs/verification.md)。
+近期直播消息通过轮询读取，官方直播连接由宿主显式启动。媒体依赖和官方授权按需要配置，真实验证范围与已知限制见[验证记录](docs/verification.md)。
 
 ## 快速开始
 
@@ -115,9 +115,52 @@ console.log(video.title);
 
 如需共用 CLI/MCP 的配置和登录状态，从同一包导入 `loadKit`，调用 `await loadKit("./config.local.json")`。完整 API 见 [使用说明](docs/usage.md)。
 
+## 合集、字幕和更新事件
+
+沿用上面的配置与登录状态，可以直接调用：
+
+```sh
+# 列出 UP 主的合集和系列
+npx --yes @bili-agent-kit/cli@latest --config config.local.json collections '{"uid":"2267573"}'
+
+# 读取 30–90 秒的已有字幕，保留原视频时间轴；需要登录
+npx --yes @bili-agent-kit/cli@latest --config config.local.json transcript '{"reference":"BV1EJ411i7Q9","startSeconds":30,"endSeconds":90,"format":"srt"}'
+
+# 检测 UP 主新增投稿
+npx --yes @bili-agent-kit/cli@latest --config config.local.json events_poll '{"source":"user_videos","uid":"2267573"}'
+```
+
+增量事件第一次调用只建立基线，后续需要由你的程序定期调用。处理完成后用 `events_ack` 确认，否则同一事件会继续返回。合集、系列、稍后再看分页和收藏管理参数见[扩展说明](docs/agent-capabilities.md)。
+
+## 抽帧和本地语音转写
+
+先安装 FFmpeg；语音转写还需 whisper.cpp 和模型文件。在 `config.local.json` 中加入[媒体与 ASR 配置](docs/agent-capabilities.md#时间素材与本地-asr)，指定输入、输出目录及模型路径，再运行：
+
+```sh
+# 提取两个时间点的画面
+npx --yes @bili-agent-kit/cli@latest --config config.local.json online_frames '{"reference":"BV1EJ411i7Q9","timestampsSeconds":[12.5,31]}'
+
+# 下载所需音频并在本地转写 30–90 秒，返回 SRT 文本
+npx --yes @bili-agent-kit/cli@latest --config config.local.json asr_transcribe '{"reference":"BV1EJ411i7Q9","startSeconds":30,"durationSeconds":60,"language":"zh","format":"srt"}'
+```
+
+ASR 也支持输入媒体目录内的本地文件，不把音频上传到云端；识别精度取决于模型和音质。字幕读取和语音转写分别调用，视频没有字幕时不会自动启动转写。
+
+## 官方开放平台
+
+官方创作数据、投稿、Webhook 和实时直播需要自己的开放平台应用及对应权限，扫码登录的 Cookie 不能代替。CLI/SDK 支持 OAuth 授权码交换和 token 刷新；回调接收、直播连接由你的服务启动，CLI/MCP 只消费已接收的事件。投稿回调仅覆盖本应用投递的视频。
+
+这些能力已完成协议模拟测试，仍需应用授权后真实联调。配置与接入方式见[官方授权和推送](docs/agent-capabilities.md#官方-oauth数据和推送)。
+
+## 从 0.2.x 升级
+
+v0.3.0 使用 v3 状态格式。升级前停止共享同一 `stateDir` 的旧进程；首次事务会备份旧状态并迁移草稿、预算和消息进度。不要让新旧版本交替使用同一目录，也不要在新写入后直接恢复旧备份。详见[状态升级与恢复](docs/usage.md#状态升级与恢复)。
+
+使用 `@latest` 的 CLI/MCP 会解析到最新发布版本，已运行的 MCP 服务需重启；SDK 项目运行 `npm install @bili-agent-kit/core@latest` 更新依赖。
+
 ## 互动、投稿和账号数据
 
-点赞、回复、发动态和投稿等操作默认关闭。使用前需要配置允许的操作和目标；执行时先生成草稿，由你检查并通过 CLI 或 SDK 批准。发送结果不明时会停下来，核实后才能继续。私信还要求对方在可信名单中，且双方互相关注。
+收藏管理、点赞、回复、发动态和投稿等写操作默认关闭。使用前需要配置允许的操作和目标；执行时先生成草稿，由你检查并通过 CLI 或 SDK 批准。发送结果不明时会停下来，核实后才能继续。私信还要求对方在可信名单中，且双方互相关注。
 
 登录信息以明文保存在你指定的本地文件中，不会自动从浏览器提取 Cookie。草稿、消息处理进度和上传记录保存在 `stateDir`，账号凭据单独保存。不要把这些文件提交到仓库或发给别人。
 
